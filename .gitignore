@@ -1,0 +1,12 @@
+# User data / local state (never commit)
+profiles.json
+switch.log
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# OS
+Thumbs.db
+desktop.ini
