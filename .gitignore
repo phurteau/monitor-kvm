@@ -1,5 +1,6 @@
 # User data / local state (never commit)
 profiles.json
+settings.json
 switch.log
 
 # Python

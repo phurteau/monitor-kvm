@@ -19,40 +19,41 @@ from tkinter import ttk, messagebox, simpledialog
 import ddc
 import layout
 import profiles
+import theme as theme_mod
 import tray as tray_mod
 import updater
+from colorwheel import AccentPicker
+from theme import THEME as T
 from version import VERSION
 from vcp_inputs import COMMON_INPUTS, label_for_value
 
 APP_TITLE = "Monitor Workspace Switcher"
-BG = "#000000"          # pure black background
-CARD = "#0a0f0a"        # near-black raised panel
-ACCENT = "#00ff00"      # pure green accent
-ACCENT2 = "#00ff00"     # primary highlight (same green)
-ACCENT_DIM = "#00b800"  # pressed / hover green
-BTN_TXT = "#001400"     # dark text for on-green buttons
-TXT = "#c8ffc8"         # soft green-white body text
-MUTED = "#4f8f57"       # muted green-grey
-BORDER = "#154a1e"      # subtle green border for non-primary boxes
+
+
+def C(key):
+    """Current value of a theme token (re-read live on every use)."""
+    return T.t(key)
 
 
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title(f"{APP_TITLE}  v{VERSION}")
-        self.configure(bg=BG)
-        self.geometry("760x780")
-        self.minsize(680, 640)
+        self.configure(bg=C("bg"))
+        self.geometry("760x820")
+        self.minsize(680, 680)
 
         self.store = profiles.load()
         self.detected: list[ddc.Monitor] = []
         self._layout_cache: list = []
         self._ui_queue: queue.Queue = queue.Queue()
+        self._themed: list = []  # (widget, {option: token_key}) for live retheme
 
         self._build_style()
         self._build_ui()
         self._refresh_workspace_buttons()
         self._log("Ready. Reading your display layout…")
+        T.subscribe(self._apply_theme)
         self.after(80, self._pump)
         self.after(200, self.refresh_layout)
         self.after(1500, lambda: self.check_updates(manual=False))
@@ -84,74 +85,133 @@ class App(tk.Tk):
         self.after(80, self._pump)
 
     # ---------- styling ----------
+    def _track(self, widget, mapping):
+        """Register a raw-tk widget so _apply_theme recolors it live.
+
+        mapping: {tk_option: token_key}, e.g. {"bg": "panel", "fg": "txt"}.
+        """
+        self._themed.append((widget, mapping))
+        self._apply_one(widget, mapping)
+        return widget
+
+    @staticmethod
+    def _apply_one(widget, mapping):
+        for opt, key in mapping.items():
+            try:
+                widget.configure(**{opt: C(key)})
+            except tk.TclError:
+                pass
+
     def _build_style(self):
         style = ttk.Style(self)
         try:
             style.theme_use("clam")
         except tk.TclError:
             pass
-        style.configure("TFrame", background=BG)
-        style.configure("Card.TFrame", background=CARD)
-        style.configure("TLabel", background=BG, foreground=TXT, font=("Segoe UI", 10))
-        style.configure("H1.TLabel", background=BG, foreground=ACCENT, font=("Segoe UI Semibold", 16))
-        style.configure("Muted.TLabel", background=BG, foreground=MUTED, font=("Segoe UI", 9))
-        style.configure("Card.TLabel", background=CARD, foreground=TXT, font=("Segoe UI", 10))
-        # dark buttons with green text/outline
+        self._style = style
+        self._configure_ttk()
+
+    def _configure_ttk(self):
+        style = self._style
+        bg, bg2 = C("bg"), C("bg2")
+        panel, panel2 = C("panel"), C("panel2")
+        line, txt, dim = C("line"), C("txt"), C("dim")
+        acc, acc2, ink = C("acc"), C("acc2"), C("acc_ink")
+
+        style.configure("TFrame", background=bg)
+        style.configure("Card.TFrame", background=panel)
+        style.configure("TLabel", background=bg, foreground=txt, font=("Segoe UI", 10))
+        style.configure("H1.TLabel", background=bg, foreground=acc, font=("Segoe UI Semibold", 16))
+        style.configure("Muted.TLabel", background=bg, foreground=dim, font=("Segoe UI", 9))
+        style.configure("Card.TLabel", background=panel, foreground=txt, font=("Segoe UI", 10))
+        # neutral buttons: panel2 fill, --line border, hover raises border to --acc2
         style.configure("TButton", font=("Segoe UI", 10), padding=6,
-                        background=CARD, foreground=ACCENT, bordercolor=BORDER, focuscolor=ACCENT)
+                        background=panel2, foreground=txt, bordercolor=line,
+                        focuscolor=acc2, relief="flat")
         style.map("TButton",
-                  background=[("active", "#16261a")],
-                  foreground=[("active", ACCENT)])
+                  background=[("active", panel2)],
+                  foreground=[("active", txt)],
+                  bordercolor=[("active", acc2)])
+        # accent (primary) button style
+        style.configure("Accent.TButton", font=("Segoe UI Semibold", 10), padding=6,
+                        background=acc, foreground=ink, bordercolor=acc, relief="flat")
+        style.map("Accent.TButton",
+                  background=[("active", acc2)], foreground=[("active", ink)])
         style.configure("Big.TButton", font=("Segoe UI Semibold", 12), padding=12)
-        # notebook + treeview dark theming for the setup window
-        style.configure("TNotebook", background=BG, bordercolor=BORDER)
-        style.configure("TNotebook.Tab", background=CARD, foreground=TXT, padding=(12, 6))
-        style.map("TNotebook.Tab", background=[("selected", "#16261a")],
-                  foreground=[("selected", ACCENT)])
-        style.configure("Treeview", background=CARD, fieldbackground=CARD, foreground=TXT,
-                        bordercolor=BORDER)
-        style.configure("Treeview.Heading", background=BG, foreground=ACCENT)
-        style.map("Treeview", background=[("selected", ACCENT_DIM)],
-                  foreground=[("selected", BTN_TXT)])
-        style.configure("TCombobox", fieldbackground=CARD, background=CARD, foreground=TXT)
+        # notebook + treeview
+        style.configure("TNotebook", background=bg, bordercolor=line)
+        style.configure("TNotebook.Tab", background=panel, foreground=txt, padding=(12, 6))
+        style.map("TNotebook.Tab", background=[("selected", panel2)],
+                  foreground=[("selected", acc)])
+        style.configure("Treeview", background=panel, fieldbackground=panel, foreground=txt,
+                        bordercolor=line)
+        style.configure("Treeview.Heading", background=bg, foreground=acc)
+        style.map("Treeview", background=[("selected", acc)], foreground=[("selected", ink)])
+        style.configure("TCombobox", fieldbackground=panel2, background=panel2, foreground=txt)
+        style.configure("Vertical.TScrollbar", background=panel2, troughcolor=bg,
+                        bordercolor=line, arrowcolor=dim)
+
+    def _apply_theme(self):
+        """Re-apply all colors after a theme/accent change (live)."""
+        self.configure(bg=C("bg"))
+        self._configure_ttk()
+        for widget, mapping in list(self._themed):
+            try:
+                if widget.winfo_exists():
+                    self._apply_one(widget, mapping)
+                else:
+                    self._themed.remove((widget, mapping))
+            except tk.TclError:
+                pass
+        self._draw_header()
+        self._refresh_workspace_buttons()
+        self._draw_layout()
+        if getattr(self, "_banner_info", None) is not None:
+            self._style_banner()
+        tobj = getattr(self, "tray", None)
+        if tobj is not None:
+            try:
+                tobj.refresh_icon()
+            except Exception:  # noqa: BLE001
+                pass
 
     # ---------- main layout ----------
     def _build_ui(self):
-        header = ttk.Frame(self)
-        header.pack(fill="x", padx=18, pady=(16, 6))
-        self.header_frame = header
-        titlerow = ttk.Frame(header)
-        titlerow.pack(fill="x")
-        ttk.Label(titlerow, text="Monitor Workspace Switcher", style="H1.TLabel").pack(side="left")
-        ttk.Label(titlerow, text=f"v{VERSION}", style="Muted.TLabel").pack(side="left", padx=(8, 0), anchor="s", pady=(0, 3))
-        ttk.Label(header, text="One click flips your monitors between inputs (a software KVM).",
-                  style="Muted.TLabel").pack(anchor="w")
+        # header: canvas with gradient + faint accent radial glow + title
+        self.header = tk.Canvas(self, height=76, highlightthickness=0, bd=0)
+        self._track(self.header, {"bg": "head2"})
+        self.header.pack(fill="x")
+        self.header.bind("<Configure>", lambda e: self._draw_header())
+
+        # theme controls row (top-right of the header area)
+        ctrl = ttk.Frame(self)
+        ctrl.pack(fill="x", padx=18, pady=(6, 0))
+        ttk.Button(ctrl, text="Toggle Light/Dark", command=self._toggle_theme).pack(side="right")
+        ttk.Button(ctrl, text="Color", command=self._open_accent_picker).pack(side="right", padx=(0, 6))
 
         # update banner (hidden until an update is found)
-        self.banner = tk.Frame(self, bg="#04140a", highlightbackground=ACCENT,
-                               highlightthickness=1)
-        self.banner_label = tk.Label(self.banner, text="", bg="#04140a", fg=ACCENT,
-                                     font=("Segoe UI Semibold", 10), anchor="w", justify="left")
+        self.banner = tk.Frame(self, highlightthickness=1)
+        self.banner_label = tk.Label(self.banner, text="", font=("Segoe UI Semibold", 10),
+                                     anchor="w", justify="left")
         self.banner_label.pack(side="left", padx=12, pady=8)
-        self.banner_btn = tk.Button(self.banner, text="Download & Update", bg=ACCENT, fg=BTN_TXT,
-                                    activebackground=ACCENT_DIM, activeforeground=BTN_TXT,
-                                    relief="flat", font=("Segoe UI Semibold", 10), padx=14, pady=5,
+        self.banner_btn = tk.Button(self.banner, text="Download & Update", relief="flat",
+                                    font=("Segoe UI Semibold", 10), padx=14, pady=5,
                                     cursor="hand2", bd=0)
         self.banner_btn.pack(side="right", padx=(6, 12), pady=8)
-        self.banner_dismiss = tk.Button(self.banner, text="Dismiss", bg="#04140a", fg=MUTED,
-                                        activebackground="#0a2410", activeforeground=TXT,
-                                        relief="flat", font=("Segoe UI", 9), padx=8, pady=5,
+        self.banner_dismiss = tk.Button(self.banner, text="Dismiss", relief="flat",
+                                        font=("Segoe UI", 9), padx=8, pady=5,
                                         cursor="hand2", bd=0, command=self._hide_banner)
         self.banner_dismiss.pack(side="right", pady=8)
-        # not packed into the window until needed
         self._banner_info = None
+        self._style_banner()
 
         # live display layout map
         maphead = ttk.Frame(self)
         maphead.pack(fill="x", padx=18, pady=(12, 2))
         ttk.Label(maphead, text="DISPLAY LAYOUT", style="Muted.TLabel").pack(side="left")
         ttk.Button(maphead, text="Refresh", command=self.refresh_layout).pack(side="right")
-        self.canvas = tk.Canvas(self, height=210, bg=CARD, highlightthickness=0, bd=0)
+        self.canvas = tk.Canvas(self, height=210, highlightthickness=0, bd=0)
+        self._track(self.canvas, {"bg": "panel"})
         self.canvas.pack(fill="x", padx=18)
         self.canvas.bind("<Configure>", lambda e: self._draw_layout())
         self.canvas.bind("<Button-1>", self._on_canvas_click)
@@ -173,12 +233,72 @@ class App(tk.Tk):
         ttk.Label(self, text="ACTIVITY", style="Muted.TLabel").pack(anchor="w", padx=18, pady=(6, 2))
         logwrap = ttk.Frame(self)
         logwrap.pack(fill="both", expand=True, padx=18, pady=(0, 16))
-        self.log = tk.Text(logwrap, height=10, bg=CARD, fg=TXT, insertbackground=TXT,
-                           relief="flat", font=("Cascadia Mono", 9), wrap="word")
+        self.log = tk.Text(logwrap, height=10, relief="flat", font=("Cascadia Mono", 9), wrap="word")
+        self._track(self.log, {"bg": "panel", "fg": "txt", "insertbackground": "txt"})
         self.log.pack(side="left", fill="both", expand=True)
         sb = ttk.Scrollbar(logwrap, command=self.log.yview)
         sb.pack(side="right", fill="y")
         self.log.configure(yscrollcommand=sb.set, state="disabled")
+
+        self._draw_header()
+
+    # ---------- header gradient + accent glow ----------
+    def _draw_header(self):
+        c = self.header
+        if not c.winfo_exists():
+            return
+        c.delete("all")
+        w = c.winfo_width() or 760
+        h = int(c["height"])
+        # horizontal gradient head1 -> head2, drawn as gapless 2px bands
+        h1 = theme_mod.hex_to_rgb(C("head1"))
+        h2 = theme_mod.hex_to_rgb(C("head2"))
+        band = 2
+        for x in range(0, w, band):
+            f = x / max(1, w - 1)
+            r = int(h1[0] + (h2[0] - h1[0]) * f)
+            g = int(h1[1] + (h2[1] - h1[1]) * f)
+            b = int(h1[2] + (h2[2] - h1[2]) * f)
+            c.create_rectangle(x, 0, x + band, h, outline="",
+                               fill=theme_mod.rgb_to_hex(r, g, b))
+        # faint accent radial glow near top-center (layered ovals over the gradient)
+        acc = theme_mod.hex_to_rgb(C("acc2"))
+        base = theme_mod.hex_to_rgb(C("head1"))
+        cx = w // 2
+        for i, frac in enumerate([0.06, 0.11, 0.17]):
+            rad = 260 - i * 70
+            col = tuple(int(base[k] + (acc[k] - base[k]) * frac) for k in range(3))
+            c.create_oval(cx - rad, -rad + 8, cx + rad, rad // 2 + 8,
+                          outline="", fill=theme_mod.rgb_to_hex(*col))
+        # readable text: keep the accent "pop" when it passes AA contrast on this
+        # header background, otherwise fall back to neutral high-contrast text.
+        head_bg = C("head1")
+        acc_variants = [C("acc"), C("acc2")]
+        best_acc = max(acc_variants, key=lambda cc: theme_mod.contrast(cc, head_bg))
+        title_col = best_acc if theme_mod.contrast(best_acc, head_bg) >= 4.5 else C("txt")
+        sub_col = theme_mod.best_on(head_bg, [C("txt"), C("dim")])
+        c.create_text(20, h // 2 - 8, anchor="w", text="Monitor Workspace Switcher",
+                      fill=title_col, font=("Segoe UI Semibold", 16))
+        c.create_text(22, h // 2 + 16, anchor="w",
+                      text=f"One click flips your monitors between inputs (a software KVM).  v{VERSION}",
+                      fill=sub_col, font=("Segoe UI", 9))
+
+    # ---------- theme controls ----------
+    def _toggle_theme(self):
+        T.toggle_theme()
+        self._log(f"Theme: {T.name}.")
+
+    def _open_accent_picker(self):
+        AccentPicker(self, T, on_change=lambda hexv: T.set_accent(hexv))
+
+    def _style_banner(self):
+        acc, ink, dim, txt = C("acc"), C("acc_ink"), C("dim"), C("txt")
+        panel2 = C("panel2")
+        self.banner.configure(bg=panel2, highlightbackground=acc, highlightcolor=acc)
+        self.banner_label.configure(bg=panel2, fg=acc)
+        self.banner_btn.configure(bg=acc, fg=ink, activebackground=C("acc2"), activeforeground=ink)
+        self.banner_dismiss.configure(bg=panel2, fg=dim, activebackground=C("panel"),
+                                      activeforeground=txt)
 
     def _log(self, msg: str):
         self.log.configure(state="normal")
@@ -200,7 +320,8 @@ class App(tk.Tk):
         for i, ws in enumerate(self.store.workspaces):
             b = tk.Button(
                 row, text=ws.name, command=lambda w=ws: self.apply_workspace(w),
-                bg=ACCENT, fg=BTN_TXT, activebackground=ACCENT_DIM, activeforeground=BTN_TXT,
+                bg=C("acc"), fg=C("acc_ink"), activebackground=C("acc2"),
+                activeforeground=C("acc_ink"),
                 relief="flat", font=("Segoe UI Semibold", 13), padx=22, pady=16, cursor="hand2",
                 bd=0, highlightthickness=0,
             )
@@ -247,12 +368,13 @@ class App(tk.Tk):
 
     def _show_banner(self, info):
         self._banner_info = info
+        self._style_banner()
         notes = f"  -  {info.notes.splitlines()[0]}" if info.notes else ""
         self.banner_label.config(text=f"Update available:  v{info.current}  \u2192  v{info.latest}{notes}")
         self.banner_btn.config(text="Download & Update", state="normal",
                                command=lambda: self._do_update(info))
-        # place the banner just under the header, above the layout map
-        self.banner.pack(fill="x", padx=18, pady=(4, 6), after=self.header_frame)
+        # place the banner near the top, above the layout map
+        self.banner.pack(fill="x", padx=18, pady=(4, 6), after=self.header)
 
     def _hide_banner(self):
         try:
@@ -391,7 +513,7 @@ class App(tk.Tk):
         ch = c.winfo_height() or 210
         if not items:
             c.create_text(cw // 2, ch // 2, text="No displays read yet - click Refresh",
-                          fill=MUTED, font=("Segoe UI", 10))
+                          fill=C("dim"), font=("Segoe UI", 10))
             return
 
         pad = 16
@@ -416,8 +538,8 @@ class App(tk.Tk):
             y1 = y0 + d.height * scale
 
             controllable = m is not None
-            fill = "#0f1f10" if controllable else "#161616"
-            border = ACCENT if d.primary else (BORDER if controllable else "#3a3a3a")
+            fill = C("panel2") if controllable else C("bg2")
+            border = C("acc") if d.primary else (C("line") if controllable else C("line"))
             rid = c.create_rectangle(x0 + 3, y0 + 3, x1 - 3, y1 - 3,
                                      fill=fill, outline=border, width=2)
             # remember hit-box -> item (only DDC-controllable ones are clickable)
@@ -446,8 +568,8 @@ class App(tk.Tk):
             lines = [name + prim, res, orient, inp, hint]
             line_h = 14
             start = cy - (len(lines) - 1) * line_h / 2
-            in_color = ACCENT if (m and it["input"] is not None) else MUTED
-            colors = [TXT, MUTED, MUTED, in_color, MUTED]
+            in_color = C("acc") if (m and it["input"] is not None) else C("dim")
+            colors = [C("txt"), C("dim"), C("dim"), in_color, C("dim")]
             for i, (ln, col) in enumerate(zip(lines, colors)):
                 if not ln:
                     continue
@@ -465,19 +587,21 @@ class App(tk.Tk):
 
     def _open_input_popup(self, it, sx, sy):
         m = it["monitor"]
+        panel, panel2, txt, dim = C("panel"), C("panel2"), C("txt"), C("dim")
+        acc, acc2, ink, line = C("acc"), C("acc2"), C("acc_ink"), C("line")
         top = tk.Toplevel(self)
         top.title("Set input")
-        top.configure(bg=CARD)
+        top.configure(bg=panel)
         top.transient(self)
         top.geometry(f"+{sx}+{sy}")
         top.attributes("-topmost", True)
 
         d = it["display"]
-        tk.Label(top, text=d.friendly or m.display_label, bg=CARD, fg=ACCENT,
+        tk.Label(top, text=d.friendly or m.display_label, bg=panel, fg=acc,
                  font=("Segoe UI Semibold", 11)).pack(anchor="w", padx=12, pady=(10, 2))
         cur = it["input"]
         cur_txt = label_for_value(cur) if cur is not None else "unknown"
-        tk.Label(top, text=f"Current input: {cur_txt}", bg=CARD, fg=MUTED,
+        tk.Label(top, text=f"Current input: {cur_txt}", bg=panel, fg=dim,
                  font=("Segoe UI", 9)).pack(anchor="w", padx=12)
 
         var = tk.StringVar()
@@ -490,9 +614,9 @@ class App(tk.Tk):
         combo.pack(padx=12, pady=10)
 
         tk.Label(top, text="Setting an input may switch this monitor to another\nmachine - use its physical buttons to return if needed.",
-                 bg=CARD, fg=MUTED, font=("Segoe UI", 8), justify="left").pack(anchor="w", padx=12)
+                 bg=panel, fg=dim, font=("Segoe UI", 8), justify="left").pack(anchor="w", padx=12)
 
-        btns = tk.Frame(top, bg=CARD)
+        btns = tk.Frame(top, bg=panel)
         btns.pack(fill="x", padx=12, pady=10)
 
         def parse(text):
@@ -519,15 +643,15 @@ class App(tk.Tk):
                 top.destroy()
 
         tk.Button(btns, text="Set input", command=lambda: do_set(True),
-                  bg=ACCENT, fg=BTN_TXT, activebackground=ACCENT_DIM, activeforeground=BTN_TXT,
+                  bg=acc, fg=ink, activebackground=acc2, activeforeground=ink,
                   relief="flat", font=("Segoe UI Semibold", 10), padx=14, pady=6,
                   cursor="hand2", bd=0).pack(side="left")
         tk.Button(btns, text="Test (keep open)", command=lambda: do_set(False),
-                  bg=CARD, fg=ACCENT, activebackground="#16261a", activeforeground=ACCENT,
+                  bg=panel2, fg=txt, activebackground=panel, activeforeground=txt,
                   relief="flat", font=("Segoe UI", 10), padx=10, pady=6,
-                  cursor="hand2", bd=1).pack(side="left", padx=6)
+                  cursor="hand2", highlightthickness=1, highlightbackground=line, bd=0).pack(side="left", padx=6)
         tk.Button(btns, text="Close", command=top.destroy,
-                  bg=CARD, fg=MUTED, activebackground="#16261a", activeforeground=TXT,
+                  bg=panel, fg=dim, activebackground=panel2, activeforeground=txt,
                   relief="flat", font=("Segoe UI", 10), padx=10, pady=6,
                   cursor="hand2", bd=0).pack(side="right")
 
@@ -537,7 +661,7 @@ class SetupWindow(tk.Toplevel):
         super().__init__(app)
         self.app = app
         self.title("Setup - Monitors & Workspaces")
-        self.configure(bg=BG)
+        self.configure(bg=C("bg"))
         self.geometry("760x600")
         self.transient(app)
 
@@ -644,8 +768,10 @@ class SetupWindow(tk.Toplevel):
         left = ttk.Frame(f)
         left.pack(side="left", fill="y", padx=10, pady=10)
         ttk.Label(left, text="Workspaces").pack(anchor="w")
-        self.ws_list = tk.Listbox(left, height=16, width=22, bg=CARD, fg=TXT,
-                                  selectbackground=ACCENT, relief="flat", font=("Segoe UI", 10))
+        self.ws_list = tk.Listbox(left, height=16, width=22, bg=C("panel"), fg=C("txt"),
+                                  selectbackground=C("acc"), selectforeground=C("acc_ink"),
+                                  relief="flat", font=("Segoe UI", 10),
+                                  highlightthickness=1, highlightbackground=C("line"))
         self.ws_list.pack(fill="y", expand=True, pady=4)
         self.ws_list.bind("<<ListboxSelect>>", lambda e: self._show_ws_detail())
         wsb = ttk.Frame(left)

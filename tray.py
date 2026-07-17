@@ -17,14 +17,22 @@ except Exception:  # noqa: BLE001
     AVAILABLE = False
 
 
-def _icon_image():
-    img = Image.new("RGBA", (64, 64), (10, 14, 10, 255))
+def _icon_image(accent=(0, 255, 0)):
+    img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
-    green = (0, 255, 0, 255)
-    d.rectangle([8, 12, 56, 44], outline=green, width=4)     # screen
-    d.rectangle([27, 44, 37, 50], fill=green)                # neck
-    d.rectangle([18, 52, 46, 57], fill=green)                # base
+    col = (*accent, 255)
+    d.rectangle([8, 12, 56, 44], outline=col, width=4)     # screen
+    d.rectangle([27, 44, 37, 50], fill=col)                # neck
+    d.rectangle([18, 52, 46, 57], fill=col)                # base
     return img
+
+
+def _accent_rgb(app):
+    try:
+        import theme as _t
+        return _t.hex_to_rgb(_t.THEME["acc2"])
+    except Exception:  # noqa: BLE001
+        return (0, 255, 0)
 
 
 class Tray:
@@ -35,10 +43,18 @@ class Tray:
     def start(self) -> bool:
         if not AVAILABLE:
             return False
-        self.icon = pystray.Icon("monitor_kvm", _icon_image(), "Monitor Switcher")
+        self.icon = pystray.Icon("monitor_kvm", _icon_image(_accent_rgb(self.app)),
+                                 "Monitor Switcher")
         self.icon.menu = self._build_menu()
         threading.Thread(target=self.icon.run, daemon=True).start()
         return True
+
+    def refresh_icon(self):
+        if self.icon is not None:
+            try:
+                self.icon.icon = _icon_image(_accent_rgb(self.app))
+            except Exception:  # noqa: BLE001
+                pass
 
     def _build_menu(self):
         items = []

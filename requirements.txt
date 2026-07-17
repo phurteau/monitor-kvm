@@ -1,4 +1,6 @@
-# Core app uses only the Python standard library (tkinter).
-# These optional packages enable the system-tray switcher:
-pystray>=0.19
+# Core app uses only the Python standard library (tkinter) plus Pillow
+# (Pillow renders the HSV accent color wheel and the tray icon).
 pillow>=9.0
+
+# Optional: enables the system-tray switcher.
+pystray>=0.19

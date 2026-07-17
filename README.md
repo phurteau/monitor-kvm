@@ -14,9 +14,13 @@ monitor's position, resolution, **orientation** (a vertical/portrait panel is dr
 portrait), which one is primary, and the input each is currently on. **Click any
 monitor box** to set/learn its input inline.
 
-A **pure-black theme with `#00ff00` (green) accents** is used throughout, an optional
-**system-tray icon** lets you switch workspaces without opening the window, and a
-built-in **updater** shows a one-click banner when a new release is available.
+A **token-based dual theme** (true-black **dark** default, plus a soft off-white
+**light** mode) is used throughout, driven by a single user-chosen **accent color**
+picked from an **HSV color wheel** - the accent recolors every highlight (buttons,
+active states, the primary-monitor ring, header glow) while all surfaces stay neutral.
+Theme + accent persist across launches. An optional **system-tray icon** lets you
+switch workspaces without opening the window, and a built-in **updater** shows a
+one-click banner when a new release is available.
 
 ---
 
@@ -34,7 +38,8 @@ as a workspace. That works for any monitor OSD, not just a specific brand.
 
 - Windows
 - Python 3.9+ (standard library `tkinter`)
-- **Optional:** `pip install pystray pillow` - enables the system-tray icon
+- **Pillow** (`pip install pillow`) - renders the HSV accent color wheel and tray icon
+- **Optional:** `pip install pystray` - enables the system-tray icon
   (the app runs fine without it, just without a tray).
 - Two (or more) source machines physically connected to the monitors at the same
   time (that's what makes it a KVM - you flip which input is shown).
@@ -123,6 +128,27 @@ standard library - no extra dependency.
 The update source is set in `version.py` (`GITHUB_OWNER` / `GITHUB_REPO`), and the
 current app version is `VERSION` there - bump it and tag each GitHub release `vX.Y.Z`.
 
+## Theming
+
+The whole UI is driven by a small set of **design tokens** (`theme.py`) - the desktop
+equivalent of CSS custom properties. There are two themes:
+
+- **Dark** (default) - true-black background with neutral‑gray panels.
+- **Light** - soft off‑white.
+
+A single user‑chosen **accent color** drives every interactive highlight (buttons,
+active states, the primary‑monitor ring, the header glow). Everything else stays
+neutral, so any accent looks good. From the accent, the engine derives a brighter
+companion (`acc2`, for hovers/glows) and an ink color (auto black/white) that keeps
+text readable on accent fills.
+
+- **Toggle Light/Dark** - top‑right button.
+- **Accent color…** - opens an **HSV color wheel**: drag around the wheel (hue = angle,
+  saturation = distance from center), use the **Brightness** slider, or type a `#rrggbb`
+  hex. Changes apply live; **Reset to default** restores the default accent (`#025500`).
+
+Your theme + accent are saved to `settings.json` (gitignored) and restored on launch.
+
 ---
 
 ## Files
@@ -130,6 +156,8 @@ current app version is `VERSION` there - bump it and tag each GitHub release `vX
 | File | Purpose |
 |------|---------|
 | `app.py` | GUI: display-layout map, click-to-set inputs, workspace buttons, capture & edit |
+| `theme.py` | Token-based dual-theme engine (dark/light + accent derivation + persistence) |
+| `colorwheel.py` | HSV color-wheel accent picker dialog |
 | `layout.py` | Reads the live Windows display arrangement (position, size, orientation, primary) via Win32 |
 | `tray.py` | Optional system-tray icon for switching workspaces without the window |
 | `updater.py` | Checks GitHub Releases and applies one-click updates in place |
