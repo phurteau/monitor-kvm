@@ -8,6 +8,12 @@ __pycache__/
 *.pyc
 *.pyo
 
+# PyInstaller build artifacts
+build/
+dist/
+*.spec
+mkvm_debug*
+
 # OS
 Thumbs.db
 desktop.ini

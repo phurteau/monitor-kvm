@@ -30,8 +30,9 @@ import colorsys
 import json
 import os
 
-_HERE = os.path.dirname(os.path.abspath(__file__))
-SETTINGS_PATH = os.path.join(_HERE, "settings.json")
+from apppaths import data_dir
+
+SETTINGS_PATH = os.path.join(data_dir(), "settings.json")
 
 DEFAULT_THEME = "dark"
 DEFAULT_ACCENT = "#025500"

@@ -19,8 +19,10 @@ import json
 import os
 import shutil
 import ssl
+import sys
 import urllib.request
 import urllib.error
+import webbrowser
 import zipfile
 from dataclasses import dataclass
 from typing import Optional
@@ -29,10 +31,15 @@ import version as appversion
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _API = "https://api.github.com/repos/{owner}/{repo}/releases/latest"
+_RELEASES_PAGE = "https://github.com/{owner}/{repo}/releases/latest"
 _UA = "monitor-kvm-updater"
 
 # Files/dirs we never overwrite (user data + local state).
-_PRESERVE = {"profiles.json", "switch.log", ".git"}
+_PRESERVE = {"profiles.json", "settings.json", "switch.log", ".git"}
+
+
+def _is_frozen() -> bool:
+    return bool(getattr(sys, "frozen", False))
 
 
 @dataclass
@@ -121,7 +128,42 @@ def _detect_strip_prefix(names: list[str]) -> str:
     return ""
 
 
+def _downloads_dir() -> str:
+    d = os.path.join(os.path.expanduser("~"), "Downloads")
+    return d if os.path.isdir(d) else os.path.expanduser("~")
+
+
+def _apply_frozen(download_url: str) -> tuple[bool, str]:
+    """When running as a packaged .exe we can't hot-swap the running binary
+    safely, so download the release zip to the user's Downloads folder and open
+    the releases page for a clean manual swap."""
+    page = _RELEASES_PAGE.format(owner=appversion.GITHUB_OWNER, repo=appversion.GITHUB_REPO)
+    saved = ""
+    if download_url:
+        try:
+            blob = _http_get(download_url, accept="application/octet-stream", timeout=120)
+            fname = download_url.split("/")[-1] or "monitor-kvm-update.zip"
+            if not fname.lower().endswith(".zip"):
+                fname += ".zip"
+            saved = os.path.join(_downloads_dir(), fname)
+            with open(saved, "wb") as fh:
+                fh.write(blob)
+        except Exception:  # noqa: BLE001
+            saved = ""
+    try:
+        webbrowser.open(page)
+    except Exception:  # noqa: BLE001
+        pass
+    if saved:
+        return True, (f"Downloaded the new version to:\n{saved}\n"
+                      "Close this app, unzip, and run the new .exe (opened the releases page too).")
+    return True, ("Opened the releases page in your browser - download the new .exe there, "
+                  "then close and replace this one.")
+
+
 def download_and_apply(download_url: str, project_dir: Optional[str] = None) -> tuple[bool, str]:
+    if _is_frozen():
+        return _apply_frozen(download_url)
     project_dir = project_dir or _HERE
     if not download_url:
         return False, "No download URL for the release."

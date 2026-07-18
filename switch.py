@@ -18,10 +18,10 @@ import sys
 
 import ddc
 import profiles
+from apppaths import data_dir
 from vcp_inputs import label_for_value
 
-_HERE = os.path.dirname(os.path.abspath(__file__))
-LOG_PATH = os.path.join(_HERE, "switch.log")
+LOG_PATH = os.path.join(data_dir(), "switch.log")
 
 
 def _log(msg: str) -> None:

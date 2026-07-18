@@ -22,10 +22,11 @@ import tempfile
 from dataclasses import dataclass
 from typing import Optional
 
+from apppaths import resource_dir
 from vcp_inputs import INPUT_SOURCE_VCP
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
-CONTROL_MY_MONITOR = os.path.join(_HERE, "tools", "ControlMyMonitor.exe")
+CONTROL_MY_MONITOR = os.path.join(resource_dir(), "tools", "ControlMyMonitor.exe")
 
 # ControlMyMonitor returns 0xFFFFFFFF (as signed -1 or unsigned 4294967295)
 # from /GetValue when it cannot read the feature.

@@ -7,8 +7,9 @@ import os
 from dataclasses import dataclass, field, asdict
 from typing import Optional
 
-_HERE = os.path.dirname(os.path.abspath(__file__))
-PROFILES_PATH = os.path.join(_HERE, "profiles.json")
+from apppaths import data_dir
+
+PROFILES_PATH = os.path.join(data_dir(), "profiles.json")
 
 
 @dataclass

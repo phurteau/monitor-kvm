@@ -403,12 +403,16 @@ class App(tk.Tk):
         import sys
         import os
         import subprocess
-        script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "app.py")
-        py = sys.executable
-        pyw = os.path.join(os.path.dirname(py), "pythonw.exe")
-        launcher = pyw if os.path.exists(pyw) else py
         try:
-            subprocess.Popen([launcher, script], cwd=os.path.dirname(script))
+            if getattr(sys, "frozen", False):
+                # packaged exe: relaunch the exe itself
+                subprocess.Popen([sys.executable], cwd=os.path.dirname(sys.executable))
+            else:
+                script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "app.py")
+                py = sys.executable
+                pyw = os.path.join(os.path.dirname(py), "pythonw.exe")
+                launcher = pyw if os.path.exists(pyw) else py
+                subprocess.Popen([launcher, script], cwd=os.path.dirname(script))
         except Exception as e:  # noqa: BLE001
             self._log(f"Restart failed, please relaunch manually: {e}")
             return
