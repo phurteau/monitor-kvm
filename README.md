@@ -67,13 +67,6 @@ as a workspace. That works for any monitor OSD, not just a specific brand.
 6. Back on the main window you'll now have big **Personal** / **Work** buttons.
    One click applies that workspace.
 
-
-
-
-
-
-
-
 ---
 
 ## True one‑click from the desktop
