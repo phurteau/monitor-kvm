@@ -24,6 +24,46 @@ one-click banner when a new release is available.
 
 ---
 
+## The key idea: you switch *away from yourself*
+
+This is the part everyone gets stuck on. The app controls your **monitors**, not
+the other PC. And a monitor only reliably obeys DDC/CI from the PC that's
+**currently on screen** (its active input). So the rule is:
+
+> **The PC you're currently looking at is the one that tells the monitors to jump
+> to another input.** You never need the *other* PC to be "detected."
+
+The round-trip for a Personal PC (on DisplayPort) + Work PC (on HDMI) sharing two
+monitors:
+
+- **At the Personal PC:** click a button that sends the monitors to **HDMI** →
+  your Work PC appears.
+- **Now you're on the Work PC** (it's the active input): click a button that sends
+  the monitors to **DisplayPort** → Personal comes back.
+
+You don't detect "Personal" from the Work PC - the two shared monitors *are*
+detected (they're showing HDMI), and you simply command them back to DisplayPort;
+whatever PC is plugged into DisplayPort lights up on its own.
+
+**Install the app on both PCs**, each with a way to point the monitors at the
+*other* input. Monitors are matched by **serial number**, so profiles work on both.
+Run the switch from the machine that's currently on screen. (If a PC is locked down
+and can't run the app, use the monitor's physical Input button as a fallback.)
+
+There's a **"How it works"** button in the app that explains this too.
+
+---
+
+## Quick Switch (the fastest path)
+
+The main window has **Quick Switch** buttons - **All → DisplayPort**,
+**All → HDMI**, **All → USB‑C** - that send every detected monitor to that
+standard input in one click, no saved profile needed. On the Work PC, "All →
+DisplayPort" jumps you straight back to Personal. (These use the MCCS‑standard
+codes; non‑standard panels can use a saved workspace with per‑monitor values.)
+
+---
+
 ## Why it has to "learn" your monitors
 
 The command to select an input is standardized, but the **value** that means
@@ -31,6 +71,7 @@ The command to select an input is standardized, but the **value** that means
 panels use `0xD0`/`0x90`; Samsung differs again. So the app does not hard‑code
 values - it **reads the current input off each monitor** and lets you save that
 as a workspace. That works for any monitor OSD, not just a specific brand.
+
 
 ---
 
@@ -56,16 +97,19 @@ as a workspace. That works for any monitor OSD, not just a specific brand.
    `python app.py`).
 2. Click **Detect Monitors** - you should see your attached displays and the
    input each is currently on.
-3. Click **Setup / Edit Workspaces → Monitors & Capture tab**.
-4. Sit at the machine you want to capture (so *its* input is the one currently
-   shown on the monitors). Click **Refresh / Read current inputs**, then
-   **Capture these as a new workspace…** and name it e.g. **`Personal`**.
-5. Repeat from the other machine (or after switching), naming it **`Work`**.
-   - If you can't easily capture from the other PC, just edit the workspace on
-     the **Workspaces** tab and pick the input from the dropdown (e.g. `HDMI 1
-     (standard 0x11)`), using **Test** to confirm it switches.
-6. Back on the main window you'll now have big **Personal** / **Work** buttons.
-   One click applies that workspace.
+3. Click **Setup / Edit Workspaces → Monitors & Capture tab**. There are two ways
+   to make a workspace:
+   - **Capture** - reads the input the monitors are on *right now*. Use this on the
+     machine you're sitting at (e.g. capture **`Personal`** while on Personal).
+   - **New workspace → choose target input…** - pick the input you want the
+     monitors to switch *to*. Use this to build the "go to the other PC" profile you
+     can't capture (e.g. on the Work PC, build **`Go to Personal`** = all monitors →
+     DisplayPort).
+4. Click **Refresh / Read current inputs**, then either **Capture these as a new
+   workspace…** or **New workspace → choose target input…**, and name it.
+5. Do the mirror on the other machine (e.g. **`Go to Work`** = all monitors → HDMI).
+6. Back on the main window you'll have big workspace buttons (and **Quick Switch**
+   buttons). One click applies the switch.
 
 ---
 

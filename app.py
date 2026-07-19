@@ -29,6 +29,16 @@ from vcp_inputs import COMMON_INPUTS, label_for_value
 
 APP_TITLE = "Monitor Workspace Switcher"
 
+# Quick-switch buttons: send ALL detected monitors to a standard input value.
+# These are the MCCS-standard VCP 0x60 values that work on most monitors
+# (Dell, HP, ASUS, AOC, Acer, Philips, ...). Non-standard panels (some LG /
+# Samsung) can use a saved workspace with per-monitor values instead.
+QUICK_INPUTS = [
+    ("DisplayPort", 0x0F),
+    ("HDMI", 0x11),
+    ("USB-C", 0x1B),
+]
+
 
 def C(key):
     """Current value of a theme token (re-read live on every use)."""
@@ -216,8 +226,24 @@ class App(tk.Tk):
         self.canvas.bind("<Configure>", lambda e: self._draw_layout())
         self.canvas.bind("<Button-1>", self._on_canvas_click)
 
+        # quick switch: send ALL detected monitors to a standard input in one click
+        ttk.Label(self, text="QUICK SWITCH  (send all monitors to one input)",
+                  style="Muted.TLabel").pack(anchor="w", padx=18, pady=(12, 2))
+        qrow = ttk.Frame(self)
+        qrow.pack(fill="x", padx=18)
+        for label, value in QUICK_INPUTS:
+            b = tk.Button(
+                qrow, text=f"All → {label}",
+                command=lambda v=value, l=label: self.quick_switch_all(v, l),
+                relief="flat", font=("Segoe UI Semibold", 10),
+                padx=14, pady=8, cursor="hand2", bd=0, highlightthickness=1,
+            )
+            self._track(b, {"bg": "panel2", "fg": "txt", "activebackground": "panel",
+                            "activeforeground": "acc", "highlightbackground": "line"})
+            b.pack(side="left", padx=(0, 8))
+
         # workspace buttons area
-        ttk.Label(self, text="WORKSPACES", style="Muted.TLabel").pack(anchor="w", padx=18, pady=(10, 2))
+        ttk.Label(self, text="WORKSPACES", style="Muted.TLabel").pack(anchor="w", padx=18, pady=(12, 2))
         self.ws_frame = ttk.Frame(self)
         self.ws_frame.pack(fill="x", padx=18)
 
@@ -226,7 +252,8 @@ class App(tk.Tk):
         bar.pack(fill="x", padx=18, pady=12)
         ttk.Button(bar, text="Detect Monitors", command=self.detect_monitors).pack(side="left")
         ttk.Button(bar, text="Setup / Edit Workspaces", command=self.open_setup).pack(side="left", padx=6)
-        ttk.Button(bar, text="Self-Test", command=self.self_test).pack(side="left")
+        ttk.Button(bar, text="How it works", command=self._show_how_it_works).pack(side="left")
+        ttk.Button(bar, text="Self-Test", command=self.self_test).pack(side="left", padx=6)
         ttk.Button(bar, text="Check for Updates", command=lambda: self.check_updates(manual=True)).pack(side="right")
 
         # log
@@ -336,6 +363,69 @@ class App(tk.Tk):
         ws = self.store.get(name)
         if ws:
             self.apply_workspace(ws)
+
+    # ---------- quick switch (all monitors -> one input) ----------
+    def quick_switch_all(self, value: int, label: str):
+        def work():
+            live = self.detected or ddc.list_monitors()
+            controllable = [m for m in live]
+            if not controllable:
+                self._post(lambda: self._log("Quick switch: no monitors detected."))
+                return
+            self._post(lambda: self._log(f"Quick switch: sending all monitors → {label} (0x{value:02X})…"))
+            ok = fail = 0
+            for m in controllable:
+                try:
+                    ddc.set_input_source(m, value)
+                    ok += 1
+                    self._post(lambda m=m: self._log(f"  \u2713 {m.display_label} → {label}"))
+                except Exception as e:  # noqa: BLE001
+                    fail += 1
+                    self._post(lambda e=e, m=m: self._log(f"  ! {m.name or m.stable_id}: {e}"))
+            self._post(lambda: self._log(f"Quick switch done: {ok} switched, {fail} failed."))
+            self._post(self.refresh_layout)
+        threading.Thread(target=work, daemon=True).start()
+
+    # ---------- how it works ----------
+    def _show_how_it_works(self):
+        panel, txt, acc, dim, line = C("panel"), C("txt"), C("acc"), C("dim"), C("line")
+        top = tk.Toplevel(self)
+        top.title("How it works")
+        top.configure(bg=panel)
+        top.transient(self)
+        top.geometry("560x430")
+        top.resizable(False, False)
+
+        tk.Label(top, text="How a software KVM switches your monitors", bg=panel, fg=acc,
+                 font=("Segoe UI Semibold", 13)).pack(anchor="w", padx=16, pady=(14, 6))
+
+        body = (
+            "This app controls your MONITORS over DDC/CI (the same channel their\n"
+            "on-screen menu uses) - it does not control the other PC.\n\n"
+            "The golden rule:\n"
+            "    You switch AWAY from the PC you're currently looking at.\n\n"
+            "A monitor reliably obeys DDC/CI only from the PC that's currently on\n"
+            "screen (its active input). So:\n\n"
+            "  •  At your Personal PC (monitors on DisplayPort): click a button\n"
+            "     that sends the monitors to HDMI → your Work PC appears.\n\n"
+            "  •  Now you're on the Work PC (it's the active input): click a button\n"
+            "     that sends the monitors to DisplayPort → Personal comes back.\n\n"
+            "You never need the other PC to be 'detected'. The monitors are what's\n"
+            "detected; you just tell them which input to jump to, and whatever PC is\n"
+            "plugged into that input lights up on its own.\n\n"
+            "Setup: install this app on BOTH PCs. On each, make a profile (or use the\n"
+            "Quick Switch buttons) that points the monitors at the OTHER input.\n"
+            "Monitors are matched by serial number, so profiles work on both PCs.\n\n"
+            "Note: run the switch from the machine that's currently on screen. If a\n"
+            "PC is locked down and can't run the app, use the monitor's physical\n"
+            "Input button as a fallback."
+        )
+        tk.Label(top, text=body, bg=panel, fg=txt, font=("Segoe UI", 9), justify="left").pack(
+            anchor="w", padx=16)
+        tk.Button(top, text="Got it", command=top.destroy, bg=acc, fg=C("acc_ink"),
+                  activebackground=C("acc2"), activeforeground=C("acc_ink"), relief="flat",
+                  font=("Segoe UI Semibold", 10), padx=16, pady=6, cursor="hand2", bd=0).pack(
+            anchor="e", padx=16, pady=12)
 
     def _show_window(self):
         self.deiconify()
@@ -698,11 +788,14 @@ class SetupWindow(tk.Toplevel):
         btns.pack(fill="x", padx=10, pady=8)
         ttk.Button(btns, text="Refresh / Read current inputs", command=self._refresh_tree).pack(side="left")
         ttk.Button(btns, text="Capture these as a new workspace…", command=self._capture_workspace).pack(side="left", padx=6)
+        ttk.Button(btns, text="New workspace → choose target input…", command=self._new_manual_workspace).pack(side="left")
 
-        tip = ("Tip: The reliable way to build a workspace is to sit at the machine you want\n"
-               "to capture (so its input is the one currently shown), read the current inputs,\n"
-               "then click 'Capture'. Do this on each PC, giving each capture a name\n"
-               "(e.g. 'Personal', 'Work'). The buttons on the main window then flip between them.")
+        tip = ("Two ways to make a workspace:\n"
+               "  • Capture - reads the inputs the monitors are on RIGHT NOW (use this on\n"
+               "    the machine you're sitting at, e.g. capture 'Personal' while on Personal).\n"
+               "  • Choose target input - pick the input you want the monitors to switch TO\n"
+               "    (use this to build the 'go to the other PC' profile you can't capture,\n"
+               "    e.g. on the Work PC build 'Go to Personal' = all monitors → DisplayPort).")
         ttk.Label(f, text=tip, style="Muted.TLabel", justify="left").pack(anchor="w", padx=10, pady=6)
 
         self._refresh_tree()
@@ -765,6 +858,91 @@ class SetupWindow(tk.Toplevel):
         if unreadable:
             msg += "\nUnreadable (skipped): " + ", ".join(unreadable)
         messagebox.showinfo("Captured", msg, parent=self)
+
+    def _new_manual_workspace(self):
+        """Build a workspace by choosing the target input all monitors should
+        switch TO - no need to be on that input to capture it."""
+        mons = self.app.detected
+        if not mons:
+            messagebox.showinfo("Detect first",
+                                "Click 'Refresh / Read current inputs' first so the app knows "
+                                "which monitors to include.", parent=self)
+            return
+
+        panel, txt, acc, dim = C("panel"), C("txt"), C("acc"), C("dim")
+        dlg = tk.Toplevel(self)
+        dlg.title("New workspace - choose target input")
+        dlg.configure(bg=panel)
+        dlg.transient(self)
+        dlg.resizable(False, False)
+        dlg.grab_set()
+
+        tk.Label(dlg, text="New workspace", bg=panel, fg=acc,
+                 font=("Segoe UI Semibold", 12)).pack(anchor="w", padx=16, pady=(14, 2))
+        tk.Label(dlg, text=f"All {len(mons)} detected monitor(s) will be set to the input you pick.",
+                 bg=panel, fg=dim, font=("Segoe UI", 9)).pack(anchor="w", padx=16)
+
+        nrow = tk.Frame(dlg, bg=panel)
+        nrow.pack(fill="x", padx=16, pady=(12, 4))
+        tk.Label(nrow, text="Name", bg=panel, fg=txt, font=("Segoe UI", 10), width=6, anchor="w").pack(side="left")
+        name_var = tk.StringVar(value="Go to Personal")
+        tk.Entry(nrow, textvariable=name_var, width=28, bg=C("panel2"), fg=txt,
+                 insertbackground=txt, relief="flat", font=("Segoe UI", 10),
+                 highlightthickness=1, highlightbackground=C("line"),
+                 highlightcolor=C("acc2")).pack(side="left", ipady=3)
+
+        irow = tk.Frame(dlg, bg=panel)
+        irow.pack(fill="x", padx=16, pady=4)
+        tk.Label(irow, text="Input", bg=panel, fg=txt, font=("Segoe UI", 10), width=6, anchor="w").pack(side="left")
+        input_var = tk.StringVar()
+        values = [f"{lbl}  (0x{v:02X})" for lbl, v in COMMON_INPUTS]
+        combo = ttk.Combobox(irow, textvariable=input_var, width=32, state="readonly", values=values)
+        combo.current(0)  # DisplayPort by default
+        combo.pack(side="left")
+
+        tk.Label(dlg, text="Tip: standard DisplayPort = 0x0F, HDMI = 0x11. If your monitor uses a\n"
+                           "non-standard code, edit each monitor on the Workspaces tab afterward.",
+                 bg=panel, fg=dim, font=("Segoe UI", 8), justify="left").pack(anchor="w", padx=16, pady=(6, 0))
+
+        def create():
+            name = name_var.get().strip()
+            if not name:
+                messagebox.showwarning("Name needed", "Give the workspace a name.", parent=dlg)
+                return
+            sel = input_var.get()
+            try:
+                value = int(sel.split("0x")[1].strip().rstrip(")"), 16)
+            except (IndexError, ValueError):
+                messagebox.showwarning("Pick an input", "Choose a target input.", parent=dlg)
+                return
+            assignments = [
+                profiles.Assignment(
+                    monitor_id=m.stable_id,
+                    monitor_label=m.name or f"Monitor {m.index}",
+                    value=value,
+                    value_label=label_for_value(value),
+                )
+                for m in mons
+            ]
+            self.app.store.upsert(profiles.Workspace(name=name, assignments=assignments))
+            profiles.save(self.app.store)
+            self.app._refresh_workspace_buttons()
+            self._reload_ws_list()
+            dlg.destroy()
+            messagebox.showinfo(
+                "Created",
+                f"Workspace '{name}' created: all {len(assignments)} monitor(s) → "
+                f"{label_for_value(value)}.\nIt's now a button on the main window.",
+                parent=self)
+
+        brow = tk.Frame(dlg, bg=panel)
+        brow.pack(fill="x", padx=16, pady=14)
+        tk.Button(brow, text="Create workspace", command=create, bg=acc, fg=C("acc_ink"),
+                  activebackground=C("acc2"), activeforeground=C("acc_ink"), relief="flat",
+                  font=("Segoe UI Semibold", 10), padx=16, pady=6, cursor="hand2", bd=0).pack(side="left")
+        tk.Button(brow, text="Cancel", command=dlg.destroy, bg=panel, fg=dim,
+                  activebackground=C("panel2"), activeforeground=txt, relief="flat",
+                  font=("Segoe UI", 10), padx=12, pady=6, cursor="hand2", bd=0).pack(side="right")
 
     # --- workspaces tab: edit existing ---
     def _build_workspaces_tab(self):
