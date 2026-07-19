@@ -25,7 +25,7 @@ import updater
 from colorwheel import AccentPicker
 from theme import THEME as T
 from version import VERSION
-from vcp_inputs import COMMON_INPUTS, label_for_value
+from vcp_inputs import COMMON_INPUTS, FRIENDLY_INPUTS, input_menu, label_for_value, friendly_label_for_value
 
 APP_TITLE = "Monitor Workspace Switcher"
 
@@ -35,9 +35,39 @@ APP_TITLE = "Monitor Workspace Switcher"
 # Samsung) can use a saved workspace with per-monitor values instead.
 QUICK_INPUTS = [
     ("DisplayPort", 0x0F),
-    ("HDMI", 0x11),
+    ("HDMI 1", 0x11),
+    ("HDMI 2", 0x12),
     ("USB-C", 0x1B),
 ]
+
+
+def _make_input_combo(parent, current_value=None, width=32):
+    """Create a readonly input-picker combobox with clean names.
+
+    Returns (combo, get_value) where get_value() -> int|None. Value lookup goes
+    through a dict (no hex parsing of labels), so it can't misfire.
+    """
+    display, mapping = input_menu()
+    var = tk.StringVar()
+    combo = ttk.Combobox(parent, textvariable=var, width=width, state="readonly", values=display)
+
+    preset = None
+    if current_value is not None:
+        for label, val in FRIENDLY_INPUTS:
+            if val == current_value:
+                preset = label
+                break
+        if preset is None:
+            for label, val in mapping.items():
+                if val == current_value:
+                    preset = label
+                    break
+    combo.set(preset if preset else display[0])
+
+    def get_value():
+        return mapping.get(var.get())
+
+    return combo, get_value
 
 
 def C(key):
@@ -698,13 +728,7 @@ class App(tk.Tk):
         tk.Label(top, text=f"Current input: {cur_txt}", bg=panel, fg=dim,
                  font=("Segoe UI", 9)).pack(anchor="w", padx=12)
 
-        var = tk.StringVar()
-        values = [f"{lbl}  (0x{v:02X})" for lbl, v in COMMON_INPUTS]
-        combo = ttk.Combobox(top, textvariable=var, width=36, state="readonly", values=values)
-        if cur is not None:
-            var.set(f"{label_for_value(cur)}  (0x{cur:02X})")
-        else:
-            combo.current(0)
+        combo, get_value = _make_input_combo(top, current_value=cur, width=34)
         combo.pack(padx=12, pady=10)
 
         tk.Label(top, text="Setting an input may switch this monitor to another\nmachine - use its physical buttons to return if needed.",
@@ -713,22 +737,14 @@ class App(tk.Tk):
         btns = tk.Frame(top, bg=panel)
         btns.pack(fill="x", padx=12, pady=10)
 
-        def parse(text):
-            if "0x" in text:
-                try:
-                    return int(text.split("0x")[1].strip().rstrip(")"), 16)
-                except ValueError:
-                    return None
-            return None
-
         def do_set(close=True):
-            val = parse(var.get())
+            val = get_value()
             if val is None:
                 return
             def work():
                 try:
                     ddc.set_input_source(m, val)
-                    self._post(lambda: self._log(f"Set {d.friendly or m.stable_id} -> 0x{val:02X} ({label_for_value(val)})"))
+                    self._post(lambda: self._log(f"Set {d.friendly or m.stable_id} -> 0x{val:02X} ({friendly_label_for_value(val)})"))
                     self._post(self.refresh_layout)
                 except Exception as e:  # noqa: BLE001
                     self._post(lambda e=e: self._log(f"Set failed: {e}"))
@@ -894,14 +910,12 @@ class SetupWindow(tk.Toplevel):
         irow = tk.Frame(dlg, bg=panel)
         irow.pack(fill="x", padx=16, pady=4)
         tk.Label(irow, text="Input", bg=panel, fg=txt, font=("Segoe UI", 10), width=6, anchor="w").pack(side="left")
-        input_var = tk.StringVar()
-        values = [f"{lbl}  (0x{v:02X})" for lbl, v in COMMON_INPUTS]
-        combo = ttk.Combobox(irow, textvariable=input_var, width=32, state="readonly", values=values)
-        combo.current(0)  # DisplayPort by default
+        combo, get_value = _make_input_combo(irow, current_value=0x0F, width=30)
         combo.pack(side="left")
 
-        tk.Label(dlg, text="Tip: standard DisplayPort = 0x0F, HDMI = 0x11. If your monitor uses a\n"
-                           "non-standard code, edit each monitor on the Workspaces tab afterward.",
+        tk.Label(dlg, text="Pick the input you want the monitors to switch TO (e.g. 'HDMI 2' to reach\n"
+                           "the PC on your monitors' HDMI 2 port). If it doesn't switch, your monitor\n"
+                           "may use a non-standard code - try another from the list.",
                  bg=panel, fg=dim, font=("Segoe UI", 8), justify="left").pack(anchor="w", padx=16, pady=(6, 0))
 
         def create():
@@ -909,18 +923,18 @@ class SetupWindow(tk.Toplevel):
             if not name:
                 messagebox.showwarning("Name needed", "Give the workspace a name.", parent=dlg)
                 return
-            sel = input_var.get()
-            try:
-                value = int(sel.split("0x")[1].strip().rstrip(")"), 16)
-            except (IndexError, ValueError):
-                messagebox.showwarning("Pick an input", "Choose a target input.", parent=dlg)
+            value = get_value()
+            if value is None:
+                messagebox.showwarning("Pick an input",
+                                       "Choose an input from the list (not the separator line).",
+                                       parent=dlg)
                 return
             assignments = [
                 profiles.Assignment(
                     monitor_id=m.stable_id,
                     monitor_label=m.name or f"Monitor {m.index}",
                     value=value,
-                    value_label=label_for_value(value),
+                    value_label=friendly_label_for_value(value),
                 )
                 for m in mons
             ]
@@ -931,8 +945,8 @@ class SetupWindow(tk.Toplevel):
             dlg.destroy()
             messagebox.showinfo(
                 "Created",
-                f"Workspace '{name}' created: all {len(assignments)} monitor(s) → "
-                f"{label_for_value(value)}.\nIt's now a button on the main window.",
+                f"Workspace '{name}' created: all {len(assignments)} monitor(s) \u2192 "
+                f"{friendly_label_for_value(value)}.\nIt's now a button on the main window.",
                 parent=self)
 
         brow = tk.Frame(dlg, bg=panel)
@@ -992,29 +1006,18 @@ class SetupWindow(tk.Toplevel):
             rowf = ttk.Frame(self.detail)
             rowf.pack(fill="x", pady=3)
             ttk.Label(rowf, text=a.monitor_label, width=26).pack(side="left")
-            var = tk.StringVar()
-            combo = ttk.Combobox(rowf, textvariable=var, width=34, state="readonly",
-                                 values=[f"{lbl}  (0x{v:02X})" for lbl, v in COMMON_INPUTS])
-            # preselect current
-            cur_disp = f"{a.value_label or label_for_value(a.value)}  (0x{a.value:02X})"
-            var.set(cur_disp)
+            combo, get_value = _make_input_combo(rowf, current_value=a.value, width=32)
             combo.pack(side="left", padx=6)
-            ttk.Button(rowf, text="Test", command=lambda a=a, var=var: self._test_value(a, var)).pack(side="left")
-            self._editors.append((a, var))
+            ttk.Button(rowf, text="Test", command=lambda a=a, gv=get_value: self._test_value(a, gv)).pack(side="left")
+            self._editors.append((a, get_value))
 
         ttk.Button(self.detail, text="Save changes", command=self._save_ws_edits).pack(anchor="w", pady=10)
 
-    def _parse_combo(self, text: str) -> int:
-        # extract 0xXX
-        if "0x" in text:
-            try:
-                return int(text.split("0x")[1].strip().rstrip(")"), 16)
-            except ValueError:
-                pass
-        return 0
-
-    def _test_value(self, a: profiles.Assignment, var: tk.StringVar):
-        val = self._parse_combo(var.get())
+    def _test_value(self, a: profiles.Assignment, get_value):
+        val = get_value()
+        if val is None:
+            messagebox.showwarning("Pick an input", "Choose an input first.", parent=self)
+            return
         live = {m.stable_id: m for m in (self.app.detected or [])}
         m = live.get(a.monitor_id)
         if not m:
@@ -1024,7 +1027,7 @@ class SetupWindow(tk.Toplevel):
             return
         try:
             ddc.set_input_source(m, val)
-            self.app._log(f"[Test] {a.monitor_label} -> 0x{val:02X}")
+            self.app._log(f"[Test] {a.monitor_label} -> 0x{val:02X} ({friendly_label_for_value(val)})")
         except Exception as e:
             messagebox.showerror("Test failed", str(e), parent=self)
 
@@ -1032,10 +1035,12 @@ class SetupWindow(tk.Toplevel):
         ws = self._selected_ws()
         if not ws:
             return
-        for a, var in self._editors:
-            val = self._parse_combo(var.get())
+        for a, get_value in self._editors:
+            val = get_value()
+            if val is None:
+                continue
             a.value = val
-            a.value_label = label_for_value(val)
+            a.value_label = friendly_label_for_value(val)
         profiles.save(self.app.store)
         self.app._refresh_workspace_buttons()
         messagebox.showinfo("Saved", f"Workspace '{ws.name}' updated.", parent=self)

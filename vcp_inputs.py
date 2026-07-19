@@ -61,6 +61,55 @@ CONNECTION_HINTS = {
 }
 
 
+# Friendly, clean input names shown FIRST in every input dropdown (no hex in the
+# label, so the picker is easy to read). These are the MCCS-standard codes that
+# work on most monitors. The full COMMON_INPUTS list is offered after these for
+# non-standard panels.
+FRIENDLY_INPUTS = [
+    ("DisplayPort", 0x0F),
+    ("DisplayPort 2", 0x10),
+    ("HDMI 1", 0x11),
+    ("HDMI 2", 0x12),
+    ("USB-C", 0x1B),
+    ("DVI", 0x03),
+    ("VGA", 0x01),
+]
+
+
+def friendly_label_for_value(value: int) -> str:
+    """Clean name for a value, e.g. 0x11 -> 'HDMI 1'. Falls back to hex."""
+    for label, v in FRIENDLY_INPUTS:
+        if v == value:
+            return label
+    for label, v in COMMON_INPUTS:
+        if v == value:
+            return label
+    return f"Input 0x{value:02X}"
+
+
+def input_menu():
+    """Build the dropdown for choosing an input.
+
+    Returns (display_list, {display_string: value}). Friendly names come first,
+    then a separator, then the full advanced list - and the returned dict maps
+    every display string straight to its integer value, so callers never parse
+    hex out of a label (that was fragile and error-prone).
+    """
+    display = []
+    mapping = {}
+    seen_values = set()
+    for label, val in FRIENDLY_INPUTS:
+        display.append(label)
+        mapping[label] = val
+        seen_values.add(val)
+    display.append("\u2500\u2500 more / non-standard \u2500\u2500")  # non-selectable-ish separator
+    for label, val in COMMON_INPUTS:
+        # keep the advanced entries with their descriptive labels
+        display.append(label)
+        mapping[label] = val
+    return display, mapping
+
+
 def label_for_value(value: int) -> str:
     """Best-effort human label for a raw VCP input value."""
     for label, v in COMMON_INPUTS:

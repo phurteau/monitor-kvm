@@ -57,10 +57,15 @@ There's a **"How it works"** button in the app that explains this too.
 ## Quick Switch (the fastest path)
 
 The main window has **Quick Switch** buttons - **All → DisplayPort**,
-**All → HDMI**, **All → USB‑C** - that send every detected monitor to that
-standard input in one click, no saved profile needed. On the Work PC, "All →
-DisplayPort" jumps you straight back to Personal. (These use the MCCS‑standard
-codes; non‑standard panels can use a saved workspace with per‑monitor values.)
+**All → HDMI 1**, **All → HDMI 2**, **All → USB‑C** - that send every detected
+monitor to that input in one click, no saved profile needed.
+
+If both PCs plug into the monitors over **HDMI** (just different ports), this is
+exactly what you want: on the PC that's on screen, click **All → HDMI 2** (or
+**HDMI 1**) to jump to the machine on that port. On the Work PC, "All → HDMI 1"
+(or DisplayPort) jumps back to Personal. (These use the MCCS‑standard codes;
+non‑standard panels can use a saved workspace with per‑monitor values - build one
+with **Setup → New workspace → choose target input**.)
 
 ---
 
