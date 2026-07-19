@@ -5,7 +5,7 @@ published, update checks simply return "no update" and the app is unaffected.
 Bump VERSION on each release; the release tag should be like `v1.1.0`.
 """
 
-VERSION = "1.2.1"
+VERSION = "1.2.2"
 
 # GitHub repo that hosts releases (change if you fork/rename).
 GITHUB_OWNER = "phurteau"

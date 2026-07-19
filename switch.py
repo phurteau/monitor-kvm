@@ -19,7 +19,7 @@ import sys
 import ddc
 import profiles
 from apppaths import data_dir
-from vcp_inputs import label_for_value
+from vcp_inputs import SKIP_INPUT, label_for_value
 
 LOG_PATH = os.path.join(data_dir(), "switch.log")
 
@@ -49,8 +49,12 @@ def apply_workspace(name: str) -> int:
         _log(f"DDC error: {e}")
         return 3
 
-    ok = skipped = 0
+    ok = skipped = left = 0
     for a in ws.assignments:
+        if a.value == SKIP_INPUT:
+            left += 1
+            _log(f"  leave: '{a.monitor_label}' left unchanged")
+            continue
         m = live.get(a.monitor_id)
         if not m:
             skipped += 1
@@ -64,8 +68,11 @@ def apply_workspace(name: str) -> int:
             skipped += 1
             _log(f"  fail: {a.monitor_label}: {e}")
 
-    _log(f"Workspace '{name}': {ok} switched, {skipped} skipped.")
-    return 0 if ok else 1
+    summary = f"Workspace '{name}': {ok} switched, {skipped} skipped"
+    if left:
+        summary += f", {left} left unchanged"
+    _log(summary + ".")
+    return 0 if (ok or left) else 1
 
 
 def main() -> int:

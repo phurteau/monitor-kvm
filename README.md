@@ -116,6 +116,14 @@ as a workspace. That works for any monitor OSD, not just a specific brand.
 6. Back on the main window you'll have big workspace buttons (and **Quick Switch**
    buttons). One click applies the switch.
 
+### Leaving some monitors alone
+
+A workspace doesn't have to touch every monitor. In **Setup → Workspaces**, each
+monitor has an input dropdown that includes **"Leave unchanged (do nothing)"** -
+pick that for any monitor you *don't* want this workspace to switch. For example,
+if only two of your three monitors are shared between the two PCs, set the third to
+**Leave unchanged** so it's never touched when you flip workspaces.
+
 ---
 
 ## True one‑click from the desktop

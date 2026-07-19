@@ -76,8 +76,17 @@ FRIENDLY_INPUTS = [
 ]
 
 
+# Sentinel meaning "leave this monitor's input alone" - a workspace assignment
+# with this value is skipped when applying (the monitor is not touched). Real
+# VCP 0x60 values are 0-255, so -1 can never collide with a genuine input.
+SKIP_INPUT = -1
+SKIP_LABEL = "Leave unchanged (do nothing)"
+
+
 def friendly_label_for_value(value: int) -> str:
     """Clean name for a value, e.g. 0x11 -> 'HDMI 1'. Falls back to hex."""
+    if value == SKIP_INPUT:
+        return SKIP_LABEL
     for label, v in FRIENDLY_INPUTS:
         if v == value:
             return label
@@ -87,21 +96,26 @@ def friendly_label_for_value(value: int) -> str:
     return f"Input 0x{value:02X}"
 
 
-def input_menu():
+def input_menu(include_skip: bool = False):
     """Build the dropdown for choosing an input.
 
     Returns (display_list, {display_string: value}). Friendly names come first,
     then a separator, then the full advanced list - and the returned dict maps
     every display string straight to its integer value, so callers never parse
     hex out of a label (that was fragile and error-prone).
+
+    When include_skip is True, a "Leave unchanged (do nothing)" entry is added
+    at the very top, mapping to SKIP_INPUT - used in the workspace editor so a
+    monitor can be excluded from a workspace without switching it.
     """
     display = []
     mapping = {}
-    seen_values = set()
+    if include_skip:
+        display.append(SKIP_LABEL)
+        mapping[SKIP_LABEL] = SKIP_INPUT
     for label, val in FRIENDLY_INPUTS:
         display.append(label)
         mapping[label] = val
-        seen_values.add(val)
     display.append("\u2500\u2500 more / non-standard \u2500\u2500")  # non-selectable-ish separator
     for label, val in COMMON_INPUTS:
         # keep the advanced entries with their descriptive labels

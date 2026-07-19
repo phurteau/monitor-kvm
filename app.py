@@ -25,7 +25,7 @@ import updater
 from colorwheel import AccentPicker
 from theme import THEME as T
 from version import VERSION
-from vcp_inputs import COMMON_INPUTS, FRIENDLY_INPUTS, input_menu, label_for_value, friendly_label_for_value
+from vcp_inputs import COMMON_INPUTS, FRIENDLY_INPUTS, SKIP_INPUT, SKIP_LABEL, input_menu, label_for_value, friendly_label_for_value
 
 APP_TITLE = "Monitor Workspace Switcher"
 
@@ -41,27 +41,32 @@ QUICK_INPUTS = [
 ]
 
 
-def _make_input_combo(parent, current_value=None, width=32):
+def _make_input_combo(parent, current_value=None, width=32, include_skip=False):
     """Create a readonly input-picker combobox with clean names.
 
     Returns (combo, get_value) where get_value() -> int|None. Value lookup goes
-    through a dict (no hex parsing of labels), so it can't misfire.
+    through a dict (no hex parsing of labels), so it can't misfire. When
+    include_skip is True, a "Leave unchanged (do nothing)" entry is offered and
+    get_value() returns SKIP_INPUT for it.
     """
-    display, mapping = input_menu()
+    display, mapping = input_menu(include_skip=include_skip)
     var = tk.StringVar()
     combo = ttk.Combobox(parent, textvariable=var, width=width, state="readonly", values=display)
 
     preset = None
     if current_value is not None:
-        for label, val in FRIENDLY_INPUTS:
-            if val == current_value:
-                preset = label
-                break
-        if preset is None:
-            for label, val in mapping.items():
+        if current_value == SKIP_INPUT:
+            preset = SKIP_LABEL
+        else:
+            for label, val in FRIENDLY_INPUTS:
                 if val == current_value:
                     preset = label
                     break
+            if preset is None:
+                for label, val in mapping.items():
+                    if val == current_value:
+                        preset = label
+                        break
     combo.set(preset if preset else display[0])
 
     def get_value():
@@ -570,8 +575,12 @@ class App(tk.Tk):
         def work():
             self._post( lambda: self._log(f"Applying workspace '{ws.name}'…"))
             live = {m.stable_id: m for m in (self.detected or ddc.list_monitors())}
-            ok, miss = 0, 0
+            ok, miss, left = 0, 0, 0
             for a in ws.assignments:
+                if a.value == SKIP_INPUT:
+                    left += 1
+                    self._post( lambda a=a: self._log(f"  \u2013 {a.monitor_label}: left unchanged"))
+                    continue
                 m = live.get(a.monitor_id)
                 if not m:
                     # try to match by index fallback
@@ -585,7 +594,10 @@ class App(tk.Tk):
                 except Exception as e:
                     miss += 1
                     self._post( lambda e=e, a=a: self._log(f"  ! {a.monitor_label}: {e}"))
-            self._post( lambda: self._log(f"Done: {ok} switched, {miss} skipped."))
+            summary = f"Done: {ok} switched, {miss} skipped"
+            if left:
+                summary += f", {left} left unchanged"
+            self._post( lambda: self._log(summary + "."))
         threading.Thread(target=work, daemon=True).start()
 
     # ---------- setup window ----------
@@ -998,7 +1010,8 @@ class SetupWindow(tk.Toplevel):
         if not ws:
             return
         ttk.Label(self.detail, text=f"Assignments for '{ws.name}'").pack(anchor="w")
-        ttk.Label(self.detail, text="Each monitor and the input it will switch to:",
+        ttk.Label(self.detail, text="Choose each monitor's input - or 'Leave unchanged' to\n"
+                                    "not touch that monitor when this workspace is applied:",
                   style="Muted.TLabel").pack(anchor="w", pady=(0, 8))
 
         self._editors = []
@@ -1006,7 +1019,7 @@ class SetupWindow(tk.Toplevel):
             rowf = ttk.Frame(self.detail)
             rowf.pack(fill="x", pady=3)
             ttk.Label(rowf, text=a.monitor_label, width=26).pack(side="left")
-            combo, get_value = _make_input_combo(rowf, current_value=a.value, width=32)
+            combo, get_value = _make_input_combo(rowf, current_value=a.value, width=32, include_skip=True)
             combo.pack(side="left", padx=6)
             ttk.Button(rowf, text="Test", command=lambda a=a, gv=get_value: self._test_value(a, gv)).pack(side="left")
             self._editors.append((a, get_value))
@@ -1017,6 +1030,12 @@ class SetupWindow(tk.Toplevel):
         val = get_value()
         if val is None:
             messagebox.showwarning("Pick an input", "Choose an input first.", parent=self)
+            return
+        if val == SKIP_INPUT:
+            messagebox.showinfo("Nothing to test",
+                                "This monitor is set to 'Leave unchanged', so there's nothing to "
+                                "switch - it will be skipped when the workspace is applied.",
+                                parent=self)
             return
         live = {m.stable_id: m for m in (self.app.detected or [])}
         m = live.get(a.monitor_id)
