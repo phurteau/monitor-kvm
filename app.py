@@ -103,14 +103,15 @@ class App(tk.Tk):
         self.after(200, self.refresh_layout)
         self.after(1500, lambda: self.check_updates(manual=False))
 
-        # system tray (optional)
+        # system tray (optional). Closing the window (X) QUITS the app fully so
+        # the process exits and the .exe file is released - no lingering
+        # background process. The tray is a convenience while the app is open.
         self.tray = tray_mod.Tray(self)
         if self.tray.start():
             self._log("System tray active - right-click the tray icon to switch workspaces.")
-            self.protocol("WM_DELETE_WINDOW", self._hide_to_tray)
         else:
             self._log("System tray unavailable (pystray not installed) - window mode only.")
-            self.protocol("WM_DELETE_WINDOW", self._quit_app)
+        self.protocol("WM_DELETE_WINDOW", self._quit_app)
 
     # ---------- thread-safe UI marshalling ----------
     def _post(self, fn):
@@ -290,6 +291,7 @@ class App(tk.Tk):
         ttk.Button(bar, text="How it works", command=self._show_how_it_works).pack(side="left")
         ttk.Button(bar, text="Self-Test", command=self.self_test).pack(side="left", padx=6)
         ttk.Button(bar, text="Check for Updates", command=lambda: self.check_updates(manual=True)).pack(side="right")
+        ttk.Button(bar, text="Quit", command=self._quit_app).pack(side="right", padx=(0, 6))
 
         # log
         ttk.Label(self, text="ACTIVITY", style="Muted.TLabel").pack(anchor="w", padx=18, pady=(6, 2))
@@ -472,10 +474,26 @@ class App(tk.Tk):
         self.withdraw()
 
     def _quit_app(self):
+        # Stop the tray icon (runs on its own thread), tear down Tk, then force
+        # the process to exit so no background thread keeps the .exe locked.
         t = getattr(self, "tray", None)
         if t is not None:
-            t.stop()
-        self.destroy()
+            try:
+                t.stop()
+            except Exception:  # noqa: BLE001
+                pass
+        try:
+            self.quit()       # break out of mainloop
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            self.destroy()    # tear down all Tk windows
+        except Exception:  # noqa: BLE001
+            pass
+        # Guaranteed termination - pystray/other daemon threads can otherwise
+        # keep the frozen exe's process alive (and the file locked).
+        import os
+        os._exit(0)
 
     # ---------- updater ----------
     def check_updates(self, manual: bool = False):
@@ -978,7 +996,7 @@ class SetupWindow(tk.Toplevel):
         ttk.Label(left, text="Workspaces").pack(anchor="w")
         self.ws_list = tk.Listbox(left, height=16, width=22, bg=C("panel"), fg=C("txt"),
                                   selectbackground=C("acc"), selectforeground=C("acc_ink"),
-                                  relief="flat", font=("Segoe UI", 10),
+                                  relief="flat", font=("Segoe UI", 10), exportselection=False,
                                   highlightthickness=1, highlightbackground=C("line"))
         self.ws_list.pack(fill="y", expand=True, pady=4)
         self.ws_list.bind("<<ListboxSelect>>", lambda e: self._show_ws_detail())
@@ -1004,11 +1022,12 @@ class SetupWindow(tk.Toplevel):
         return self.app.store.workspaces[sel[0]]
 
     def _show_ws_detail(self):
-        for w in self.detail.winfo_children():
-            w.destroy()
         ws = self._selected_ws()
         if not ws:
+            # No selection (e.g. a spurious event) - leave the current pane intact.
             return
+        for w in self.detail.winfo_children():
+            w.destroy()
         ttk.Label(self.detail, text=f"Assignments for '{ws.name}'").pack(anchor="w")
         ttk.Label(self.detail, text="Choose each monitor's input - or 'Leave unchanged' to\n"
                                     "not touch that monitor when this workspace is applied:",
