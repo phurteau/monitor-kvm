@@ -287,9 +287,9 @@ class App(tk.Tk):
         bar = ttk.Frame(self)
         bar.pack(fill="x", padx=18, pady=12)
         ttk.Button(bar, text="Detect Monitors", command=self.detect_monitors).pack(side="left")
-        ttk.Button(bar, text="Setup / Edit Workspaces", command=self.open_setup).pack(side="left", padx=6)
-        ttk.Button(bar, text="How it works", command=self._show_how_it_works).pack(side="left")
-        ttk.Button(bar, text="Self-Test", command=self.self_test).pack(side="left", padx=6)
+        ttk.Button(bar, text="Find input codes", command=self.scan_all_monitors).pack(side="left", padx=6)
+        ttk.Button(bar, text="Setup / Edit Workspaces", command=self.open_setup).pack(side="left")
+        ttk.Button(bar, text="How it works", command=self._show_how_it_works).pack(side="left", padx=6)
         ttk.Button(bar, text="Check for Updates", command=lambda: self.check_updates(manual=True)).pack(side="right")
         ttk.Button(bar, text="Quit", command=self._quit_app).pack(side="right", padx=(0, 6))
 
@@ -824,14 +824,104 @@ class App(tk.Tk):
                   bg=acc, fg=ink, activebackground=acc2, activeforeground=ink,
                   relief="flat", font=("Segoe UI Semibold", 10), padx=14, pady=6,
                   cursor="hand2", bd=0).pack(side="left")
-        tk.Button(btns, text="Test (keep open)", command=lambda: do_set(False),
+        tk.Button(btns, text="Test", command=lambda: do_set(False),
                   bg=panel2, fg=txt, activebackground=panel, activeforeground=txt,
                   relief="flat", font=("Segoe UI", 10), padx=10, pady=6,
                   cursor="hand2", highlightthickness=1, highlightbackground=line, bd=0).pack(side="left", padx=6)
+        tk.Button(btns, text="Scan for codes",
+                  command=lambda: (top.destroy(), self.scan_monitor(m, d.friendly or m.display_label)),
+                  bg=panel2, fg=acc, activebackground=panel, activeforeground=acc,
+                  relief="flat", font=("Segoe UI Semibold", 10), padx=10, pady=6,
+                  cursor="hand2", highlightthickness=1, highlightbackground=line, bd=0).pack(side="left")
         tk.Button(btns, text="Close", command=top.destroy,
                   bg=panel, fg=dim, activebackground=panel2, activeforeground=txt,
                   relief="flat", font=("Segoe UI", 10), padx=10, pady=6,
                   cursor="hand2", bd=0).pack(side="right")
+
+    def scan_monitor(self, m, label):
+        """Cycle a monitor through all known input codes and log which it accepts.
+        Shared by the map-click popup and the Setup workspace editor."""
+        if not messagebox.askyesno(
+                "Scan inputs",
+                f"This will briefly cycle '{label}' through every known input code to find "
+                "which ones it accepts, then put it back.\n\n"
+                "The screen may flicker or show 'no signal' for a few seconds. Keep the other "
+                "PC powered on so its input lights up.\n\nProceed?",
+                parent=self):
+            return
+        self._log(f"[Scan] {label}: scanning input codes… (~20s, screen may flicker)")
+
+        def work():
+            accepted = []
+
+            def prog(v, ok, rb):
+                if ok:
+                    accepted.append(v)
+                    self._post(lambda v=v: self._log(
+                        f"    accepts: {friendly_label_for_value(v)} (0x{v:02X})"))
+
+            try:
+                original, results = ddc.scan_inputs(m, SCAN_CANDIDATES, progress=prog)
+            except Exception as e:  # noqa: BLE001
+                self._post(lambda e=e: self._log(f"[Scan] failed: {e}"))
+                return
+
+            def done():
+                if accepted:
+                    names = ", ".join(f"{friendly_label_for_value(v)} (0x{v:02X})" for v in accepted)
+                    self._log(f"[Scan] {label}: this monitor accepts -> {names}")
+                    self._log("       Use the code for the port your other PC is on "
+                              "(click the monitor again, or Setup -> Workspaces).")
+                else:
+                    self._log(f"[Scan] {label}: no code confirmed. If the other PC is on, "
+                              "your monitor may block DDC input-switching - check that DDC/CI "
+                              "is enabled in its on-screen menu.")
+            self._post(done)
+        threading.Thread(target=work, daemon=True).start()
+
+    def scan_all_monitors(self):
+        """Scan every detected monitor, one after another, and report the codes
+        each accepts. The most discoverable way to find your real input codes."""
+        mons = self.detected or []
+        if not mons:
+            self._log("Find input codes: no monitors detected yet - detecting now…")
+            self.detect_monitors()
+            return
+        if not messagebox.askyesno(
+                "Find input codes",
+                f"This will briefly cycle each of your {len(mons)} monitor(s) through every known "
+                "input code to discover which ones they accept, then restore them.\n\n"
+                "Screens may flicker or show 'no signal' for a few seconds each. Keep the other "
+                "PC(s) powered on.\n\nProceed?",
+                parent=self):
+            return
+
+        def work():
+            for m in mons:
+                label = m.name or m.display_label
+                accepted = []
+
+                def prog(v, ok, rb, accepted=accepted):
+                    if ok:
+                        accepted.append(v)
+                        self._post(lambda v=v: self._log(
+                            f"    accepts: {friendly_label_for_value(v)} (0x{v:02X})"))
+
+                self._post(lambda label=label: self._log(f"[Scan] {label}: scanning…"))
+                try:
+                    ddc.scan_inputs(m, SCAN_CANDIDATES, progress=prog)
+                except Exception as e:  # noqa: BLE001
+                    self._post(lambda e=e, label=label: self._log(f"[Scan] {label}: failed: {e}"))
+                    continue
+                if accepted:
+                    names = ", ".join(f"{friendly_label_for_value(v)} (0x{v:02X})" for v in accepted)
+                    self._post(lambda names=names, label=label: self._log(f"[Scan] {label}: accepts -> {names}"))
+                else:
+                    self._post(lambda label=label: self._log(
+                        f"[Scan] {label}: no code confirmed (check DDC/CI is on in its menu)."))
+            self._post(lambda: self._log("Find input codes: done. Use a confirmed code in a workspace or via the map."))
+            self._post(self.refresh_layout)
+        threading.Thread(target=work, daemon=True).start()
 
 
 class SetupWindow(tk.Toplevel):
@@ -1096,42 +1186,7 @@ class SetupWindow(tk.Toplevel):
                                    f"Monitor '{a.monitor_label}' isn't currently detected. "
                                    "Go to the Monitors tab and Refresh.", parent=self)
             return
-        if not messagebox.askyesno(
-                "Scan inputs",
-                f"This will briefly cycle '{a.monitor_label}' through every known input code to "
-                "find which ones it accepts, then put it back.\n\n"
-                "The screen may flicker or show 'no signal' for a few seconds. For best results, "
-                "have the OTHER PC powered on so real inputs light up.\n\nProceed?",
-                parent=self):
-            return
-        self.app._log(f"[Scan] {a.monitor_label}: scanning input codes… (this takes ~20s)")
-
-        def work():
-            accepted = []
-
-            def prog(v, ok, rb):
-                if ok:
-                    accepted.append(v)
-                    self.app._post(lambda v=v: self.app._log(
-                        f"    accepted: {friendly_label_for_value(v)} (0x{v:02X})"))
-
-            try:
-                original, results = ddc.scan_inputs(m, SCAN_CANDIDATES, progress=prog)
-            except Exception as e:  # noqa: BLE001
-                self.app._post(lambda e=e: self.app._log(f"[Scan] failed: {e}"))
-                return
-
-            def done():
-                if accepted:
-                    names = ", ".join(f"{friendly_label_for_value(v)} (0x{v:02X})" for v in accepted)
-                    self.app._log(f"[Scan] {a.monitor_label}: accepts -> {names}")
-                    self.app._log("       Pick the one for the port your other PC uses, then Save.")
-                else:
-                    self.app._log(f"[Scan] {a.monitor_label}: the monitor didn't confirm ANY code. "
-                                  "Likely it won't switch to inputs with no signal - power the other PC "
-                                  "on and scan again. Also check DDC/CI is enabled in the monitor's menu.")
-            self.app._post(done)
-        threading.Thread(target=work, daemon=True).start()
+        self.app.scan_monitor(m, a.monitor_label)
 
     def _test_value(self, a: profiles.Assignment, get_value):
         val = get_value()
