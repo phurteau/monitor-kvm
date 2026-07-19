@@ -17,3 +17,6 @@ mkvm_debug*
 # OS
 Thumbs.db
 desktop.ini
+
+# ad-hoc test scripts
+_*.py
