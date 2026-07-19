@@ -211,6 +211,42 @@ def set_input_source_verified(monitor: Monitor, value: int, settle: float = 1.2)
     return applied, readback
 
 
+def scan_inputs(monitor: Monitor, candidates, settle: float = 0.9, progress=None):
+    """Try each candidate input value on the monitor and report which it accepts.
+
+    For each candidate: set it, wait, read back. If the monitor reports the same
+    value, it "accepted" that code (that input really exists on this monitor).
+    The monitor's original input is restored at the end.
+
+    progress(value, accepted, readback) is called after each candidate (optional),
+    so a GUI can log live.
+
+    Returns (original_value, [(value, accepted, readback), ...]).
+    """
+    import time
+    original = get_input_source(monitor)
+    results = []
+    # de-dup while preserving order; make sure we end by restoring 'original'
+    seen = set()
+    for v in candidates:
+        v &= 0xFF
+        if v in seen:
+            continue
+        seen.add(v)
+        set_input_source(monitor, v)
+        time.sleep(settle)
+        rb = get_input_source(monitor)
+        accepted = (rb is not None and (rb & 0xFF) == v)
+        results.append((v, accepted, rb))
+        if progress:
+            progress(v, accepted, rb)
+    # restore the monitor to where it started
+    if original is not None:
+        set_input_source(monitor, original)
+        time.sleep(settle)
+    return original, results
+
+
 def self_test() -> str:
     """Human-readable snapshot of what the backend currently sees."""
     lines = []

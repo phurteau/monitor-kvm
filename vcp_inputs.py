@@ -60,6 +60,19 @@ CONNECTION_HINTS = {
     "VGA":         [0x01, 0x02],
 }
 
+# Values the input scanner tries, in a sensible order (standard first, then the
+# common non-standard LG/Samsung/USB-C codes). Deduplicated at use time.
+SCAN_CANDIDATES = [
+    0x0F, 0x10,              # DisplayPort 1/2 (standard)
+    0x11, 0x12, 0x13, 0x14,  # HDMI 1-4 (standard)
+    0x1B, 0x19, 0x20, 0xE0,  # USB-C variants
+    0x90, 0x91, 0x92,        # LG HDMI 1-3
+    0xD0, 0xD1,              # LG DisplayPort 1/2
+    0x21, 0x25,              # Samsung HDMI / DP
+    0x03, 0x04,              # DVI 1/2
+    0x01, 0x02,              # VGA 1/2
+]
+
 
 # Friendly, clean input names shown FIRST in every input dropdown (no hex in the
 # label, so the picker is easy to read). These are the MCCS-standard codes that

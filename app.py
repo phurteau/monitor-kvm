@@ -25,7 +25,7 @@ import updater
 from colorwheel import AccentPicker
 from theme import THEME as T
 from version import VERSION
-from vcp_inputs import COMMON_INPUTS, FRIENDLY_INPUTS, SKIP_INPUT, SKIP_LABEL, input_menu, label_for_value, friendly_label_for_value
+from vcp_inputs import COMMON_INPUTS, FRIENDLY_INPUTS, SCAN_CANDIDATES, SKIP_INPUT, SKIP_LABEL, input_menu, label_for_value, friendly_label_for_value
 
 APP_TITLE = "Monitor Workspace Switcher"
 
@@ -1079,9 +1079,59 @@ class SetupWindow(tk.Toplevel):
             combo, get_value = _make_input_combo(rowf, current_value=a.value, width=32, include_skip=True)
             combo.pack(side="left", padx=6)
             ttk.Button(rowf, text="Test", command=lambda a=a, gv=get_value: self._test_value(a, gv)).pack(side="left")
+            ttk.Button(rowf, text="Scan", command=lambda a=a: self._scan_inputs(a)).pack(side="left", padx=(4, 0))
             self._editors.append((a, get_value))
 
+        ttk.Label(self.detail,
+                  text="Not switching? Click Scan to auto-detect which input codes this monitor\n"
+                       "actually accepts (do it with the other PC powered on).",
+                  style="Muted.TLabel").pack(anchor="w", pady=(8, 0))
         ttk.Button(self.detail, text="Save changes", command=self._save_ws_edits).pack(anchor="w", pady=10)
+
+    def _scan_inputs(self, a: profiles.Assignment):
+        live = {m.stable_id: m for m in (self.app.detected or [])}
+        m = live.get(a.monitor_id)
+        if not m:
+            messagebox.showwarning("Not attached",
+                                   f"Monitor '{a.monitor_label}' isn't currently detected. "
+                                   "Go to the Monitors tab and Refresh.", parent=self)
+            return
+        if not messagebox.askyesno(
+                "Scan inputs",
+                f"This will briefly cycle '{a.monitor_label}' through every known input code to "
+                "find which ones it accepts, then put it back.\n\n"
+                "The screen may flicker or show 'no signal' for a few seconds. For best results, "
+                "have the OTHER PC powered on so real inputs light up.\n\nProceed?",
+                parent=self):
+            return
+        self.app._log(f"[Scan] {a.monitor_label}: scanning input codes… (this takes ~20s)")
+
+        def work():
+            accepted = []
+
+            def prog(v, ok, rb):
+                if ok:
+                    accepted.append(v)
+                    self.app._post(lambda v=v: self.app._log(
+                        f"    accepted: {friendly_label_for_value(v)} (0x{v:02X})"))
+
+            try:
+                original, results = ddc.scan_inputs(m, SCAN_CANDIDATES, progress=prog)
+            except Exception as e:  # noqa: BLE001
+                self.app._post(lambda e=e: self.app._log(f"[Scan] failed: {e}"))
+                return
+
+            def done():
+                if accepted:
+                    names = ", ".join(f"{friendly_label_for_value(v)} (0x{v:02X})" for v in accepted)
+                    self.app._log(f"[Scan] {a.monitor_label}: accepts -> {names}")
+                    self.app._log("       Pick the one for the port your other PC uses, then Save.")
+                else:
+                    self.app._log(f"[Scan] {a.monitor_label}: the monitor didn't confirm ANY code. "
+                                  "Likely it won't switch to inputs with no signal - power the other PC "
+                                  "on and scan again. Also check DDC/CI is enabled in the monitor's menu.")
+            self.app._post(done)
+        threading.Thread(target=work, daemon=True).start()
 
     def _test_value(self, a: profiles.Assignment, get_value):
         val = get_value()
