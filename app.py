@@ -410,16 +410,35 @@ class App(tk.Tk):
                 self._post(lambda: self._log("Quick switch: no monitors detected."))
                 return
             self._post(lambda: self._log(f"Quick switch: sending all monitors → {label} (0x{value:02X})…"))
-            ok = fail = 0
+            applied = ignored = fail = 0
             for m in controllable:
                 try:
-                    ddc.set_input_source(m, value)
-                    ok += 1
-                    self._post(lambda m=m: self._log(f"  \u2713 {m.display_label} → {label}"))
+                    ok, readback = ddc.set_input_source_verified(m, value)
+                    if ok:
+                        applied += 1
+                        self._post(lambda m=m: self._log(f"  \u2713 {m.display_label} → {label} (confirmed)"))
+                    elif readback is None:
+                        applied += 1  # can't verify (monitor dropped DDC on the old input) - assume sent
+                        self._post(lambda m=m: self._log(f"  \u2713 {m.display_label} → {label} (sent; couldn't read back to confirm)"))
+                    else:
+                        ignored += 1
+                        rb = f"0x{readback:02X}"
+                        self._post(lambda m=m, rb=rb: self._log(
+                            f"  \u26a0 {m.display_label}: sent {label} but monitor still reports {rb} - "
+                            f"it ignored this code (wrong value for this monitor, or that input has no signal)."))
                 except Exception as e:  # noqa: BLE001
                     fail += 1
                     self._post(lambda e=e, m=m: self._log(f"  ! {m.name or m.stable_id}: {e}"))
-            self._post(lambda: self._log(f"Quick switch done: {ok} switched, {fail} failed."))
+            summary = f"Quick switch done: {applied} confirmed"
+            if ignored:
+                summary += f", {ignored} not applied"
+            if fail:
+                summary += f", {fail} failed"
+            self._post(lambda: self._log(summary + "."))
+            if ignored and not applied:
+                self._post(lambda: self._log(
+                    "Tip: if the OTHER PC is off/asleep, turn it on first (monitors won't switch to a dead input). "
+                    "Otherwise your monitor may use a non-standard code - use Setup → Workspaces → Test to find the one that works."))
             self._post(self.refresh_layout)
         threading.Thread(target=work, daemon=True).start()
 
@@ -593,7 +612,7 @@ class App(tk.Tk):
         def work():
             self._post( lambda: self._log(f"Applying workspace '{ws.name}'…"))
             live = {m.stable_id: m for m in (self.detected or ddc.list_monitors())}
-            ok, miss, left = 0, 0, 0
+            ok, miss, left, ignored = 0, 0, 0, 0
             for a in ws.assignments:
                 if a.value == SKIP_INPUT:
                     left += 1
@@ -606,16 +625,35 @@ class App(tk.Tk):
                     self._post( lambda a=a: self._log(f"  ! monitor '{a.monitor_label}' ({a.monitor_id}) not currently attached - skipped"))
                     continue
                 try:
-                    ddc.set_input_source(m, a.value)
-                    ok += 1
-                    self._post( lambda a=a: self._log(f"  \u2713 {a.monitor_label} -> {a.value_label or label_for_value(a.value)} (0x{a.value:02X})"))
+                    applied_ok, readback = ddc.set_input_source_verified(m, a.value)
+                    label = a.value_label or label_for_value(a.value)
+                    if applied_ok:
+                        ok += 1
+                        self._post( lambda a=a, label=label: self._log(f"  \u2713 {a.monitor_label} -> {label} (0x{a.value:02X}) confirmed"))
+                    elif readback is None:
+                        ok += 1  # couldn't read back (monitor dropped DDC on old input) - assume sent
+                        self._post( lambda a=a, label=label: self._log(f"  \u2713 {a.monitor_label} -> {label} (sent; couldn't read back to confirm)"))
+                    else:
+                        ignored += 1
+                        rb = f"0x{readback:02X}"
+                        self._post( lambda a=a, label=label, rb=rb: self._log(
+                            f"  \u26a0 {a.monitor_label}: sent {label} but still reports {rb} - code ignored."))
                 except Exception as e:
                     miss += 1
                     self._post( lambda e=e, a=a: self._log(f"  ! {a.monitor_label}: {e}"))
-            summary = f"Done: {ok} switched, {miss} skipped"
+            summary = f"Done: {ok} confirmed"
+            if ignored:
+                summary += f", {ignored} not applied"
+            if miss:
+                summary += f", {miss} skipped"
             if left:
                 summary += f", {left} left unchanged"
             self._post( lambda: self._log(summary + "."))
+            if ignored and not ok:
+                self._post( lambda: self._log(
+                    "Tip: turn the target PC on first (monitors won't switch to a dead input), or the code is wrong - "
+                    "use Setup → Workspaces → Test to find the input value that actually switches."))
+            self._post(self.refresh_layout)
         threading.Thread(target=work, daemon=True).start()
 
     # ---------- setup window ----------
@@ -1063,11 +1101,23 @@ class SetupWindow(tk.Toplevel):
                                    f"Monitor '{a.monitor_label}' isn't currently detected. "
                                    "Go to the Monitors tab and Refresh.", parent=self)
             return
-        try:
-            ddc.set_input_source(m, val)
-            self.app._log(f"[Test] {a.monitor_label} -> 0x{val:02X} ({friendly_label_for_value(val)})")
-        except Exception as e:
-            messagebox.showerror("Test failed", str(e), parent=self)
+        name = friendly_label_for_value(val)
+        self.app._log(f"[Test] {a.monitor_label} -> {name} (0x{val:02X}) - verifying…")
+
+        def work():
+            try:
+                applied, readback = ddc.set_input_source_verified(m, val)
+            except Exception as e:  # noqa: BLE001
+                self.app._post(lambda e=e: messagebox.showerror("Test failed", str(e), parent=self))
+                return
+            if applied:
+                self.app._post(lambda: self.app._log(f"[Test] {a.monitor_label}: switched to {name} \u2713 (confirmed)"))
+            else:
+                rb = f"0x{readback:02X} ({friendly_label_for_value(readback)})" if readback is not None else "unreadable"
+                self.app._post(lambda rb=rb: self.app._log(
+                    f"[Test] {a.monitor_label}: monitor IGNORED {name} - still on {rb}. "
+                    f"Wrong code for this monitor, or that input has no signal (turn the other PC on)."))
+        threading.Thread(target=work, daemon=True).start()
 
     def _save_ws_edits(self):
         ws = self._selected_ws()

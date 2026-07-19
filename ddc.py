@@ -191,6 +191,26 @@ def set_input_source(monitor: Monitor, value: int) -> None:
     _run(["/SetValue", monitor.stable_id, f"{INPUT_SOURCE_VCP:02X}", str(int(value))])
 
 
+def set_input_source_verified(monitor: Monitor, value: int, settle: float = 1.2):
+    """Set the input, wait for the monitor to settle, then read it back.
+
+    Returns (applied, readback):
+      applied  = True if the monitor now reports the value we set
+      readback = the value the monitor reports after the set (or None if
+                 it can't be read).
+
+    ControlMyMonitor's /SetValue returns success for the DDC *write* even when
+    the monitor silently ignores the value, so a readback is the only reliable
+    way to know the switch actually happened.
+    """
+    import time
+    set_input_source(monitor, value)
+    time.sleep(settle)
+    readback = get_input_source(monitor)
+    applied = (readback is not None and (readback & 0xFF) == (value & 0xFF))
+    return applied, readback
+
+
 def self_test() -> str:
     """Human-readable snapshot of what the backend currently sees."""
     lines = []
