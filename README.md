@@ -50,22 +50,21 @@ whatever PC is plugged into DisplayPort lights up on its own.
 Run the switch from the machine that's currently on screen. (If a PC is locked down
 and can't run the app, use the monitor's physical Input button as a fallback.)
 
-There's a **"How it works"** button in the app that explains this too.
+There's a **"How it works"** button (in the **Menu**) that explains this too.
 
 ---
 
-## Quick Switch (the fastest path)
+## Fastest setup: the guided wizard
 
-The main window has **Quick Switch** buttons - **All → DisplayPort**,
-**All → HDMI 1**, **All → HDMI 2**, **All → USB‑C** - that send every detected
-monitor to that input in one click, no saved profile needed.
+Click **Set Up Switching** on the main window. For each monitor it tries every
+possible input one at a time - **just watch the monitor** and click
+**"Yes - it switched!"** when it flips to the other computer, or **"No - try
+next."** When you confirm, it saves your **Personal** and **Work** workspaces
+automatically, and the big **SWITCH** buttons then flip your monitors with one
+click. (This works even for monitors that use non‑standard input codes.)
 
-If both PCs plug into the monitors over **HDMI** (just different ports), this is
-exactly what you want: on the PC that's on screen, click **All → HDMI 2** (or
-**HDMI 1**) to jump to the machine on that port. On the Work PC, "All → HDMI 1"
-(or DisplayPort) jumps back to Personal. (These use the MCCS‑standard codes;
-non‑standard panels can use a saved workspace with per‑monitor values - build one
-with **Setup → New workspace → choose target input**.)
+If a monitor never switches on any code, that monitor doesn't support input
+switching over DDC/CI - use its physical Input button for that one.
 
 ---
 
@@ -113,8 +112,8 @@ as a workspace. That works for any monitor OSD, not just a specific brand.
 4. Click **Refresh / Read current inputs**, then either **Capture these as a new
    workspace…** or **New workspace → choose target input…**, and name it.
 5. Do the mirror on the other machine (e.g. **`Go to Work`** = all monitors → HDMI).
-6. Back on the main window you'll have big workspace buttons (and **Quick Switch**
-   buttons). One click applies the switch.
+6. Back on the main window you'll have big **SWITCH** buttons. One click applies
+   the switch.
 
 ### Leaving some monitors alone
 

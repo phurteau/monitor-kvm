@@ -29,17 +29,6 @@ from vcp_inputs import COMMON_INPUTS, FRIENDLY_INPUTS, SCAN_CANDIDATES, SKIP_INP
 
 APP_TITLE = "Monitor Workspace Switcher"
 
-# Quick-switch buttons: send ALL detected monitors to a standard input value.
-# These are the MCCS-standard VCP 0x60 values that work on most monitors
-# (Dell, HP, ASUS, AOC, Acer, Philips, ...). Non-standard panels (some LG /
-# Samsung) can use a saved workspace with per-monitor values instead.
-QUICK_INPUTS = [
-    ("DisplayPort", 0x0F),
-    ("HDMI 1", 0x11),
-    ("HDMI 2", 0x12),
-    ("USB-C", 0x1B),
-]
-
 
 def _make_input_combo(parent, current_value=None, width=32, include_skip=False):
     """Create a readonly input-picker combobox with clean names.
@@ -85,8 +74,8 @@ class App(tk.Tk):
         super().__init__()
         self.title(f"{APP_TITLE}  v{VERSION}")
         self.configure(bg=C("bg"))
-        self.geometry("760x820")
-        self.minsize(680, 680)
+        self.geometry("720x760")
+        self.minsize(560, 560)
 
         self.store = profiles.load()
         self.detected: list[ddc.Monitor] = []
@@ -212,6 +201,7 @@ class App(tk.Tk):
         self._draw_header()
         self._refresh_workspace_buttons()
         self._draw_layout()
+        self._style_overflow_menu()
         if getattr(self, "_banner_info", None) is not None:
             self._style_banner()
         tobj = getattr(self, "tray", None)
@@ -223,17 +213,20 @@ class App(tk.Tk):
 
     # ---------- main layout ----------
     def _build_ui(self):
+        self.resizable(True, True)
+
         # header: canvas with gradient + faint accent radial glow + title
         self.header = tk.Canvas(self, height=76, highlightthickness=0, bd=0)
         self._track(self.header, {"bg": "head2"})
         self.header.pack(fill="x")
         self.header.bind("<Configure>", lambda e: self._draw_header())
 
-        # theme controls row (top-right of the header area)
+        # a single overflow "Menu" button (top-right) holds the rarely-used items
         ctrl = ttk.Frame(self)
         ctrl.pack(fill="x", padx=18, pady=(6, 0))
-        ttk.Button(ctrl, text="Toggle Light/Dark", command=self._toggle_theme).pack(side="right")
-        ttk.Button(ctrl, text="Color", command=self._open_accent_picker).pack(side="right", padx=(0, 6))
+        self.menu_btn = ttk.Button(ctrl, text="\u2630  Menu", command=self._open_overflow_menu)
+        self.menu_btn.pack(side="right")
+        self._build_overflow_menu()
 
         # update banner (hidden until an update is found)
         self.banner = tk.Frame(self, highlightthickness=1)
@@ -251,53 +244,37 @@ class App(tk.Tk):
         self._banner_info = None
         self._style_banner()
 
-        # live display layout map
+        # live display layout map (the centerpiece; grows with the window)
         maphead = ttk.Frame(self)
         maphead.pack(fill="x", padx=18, pady=(12, 2))
-        ttk.Label(maphead, text="DISPLAY LAYOUT", style="Muted.TLabel").pack(side="left")
+        ttk.Label(maphead, text="YOUR DISPLAYS", style="Muted.TLabel").pack(side="left")
         ttk.Button(maphead, text="Refresh", command=self.refresh_layout).pack(side="right")
-        self.canvas = tk.Canvas(self, height=210, highlightthickness=0, bd=0)
+        self.canvas = tk.Canvas(self, height=200, highlightthickness=0, bd=0)
         self._track(self.canvas, {"bg": "panel"})
-        self.canvas.pack(fill="x", padx=18)
+        self.canvas.pack(fill="both", expand=True, padx=18)
         self.canvas.bind("<Configure>", lambda e: self._draw_layout())
         self.canvas.bind("<Button-1>", self._on_canvas_click)
+        ttk.Label(self, text="Tip: click a display to set its input manually.",
+                  style="Muted.TLabel").pack(anchor="w", padx=18, pady=(2, 0))
 
-        # quick switch: send ALL detected monitors to a standard input in one click
-        ttk.Label(self, text="QUICK SWITCH  (send all monitors to one input)",
-                  style="Muted.TLabel").pack(anchor="w", padx=18, pady=(12, 2))
-        qrow = ttk.Frame(self)
-        qrow.pack(fill="x", padx=18)
-        for label, value in QUICK_INPUTS:
-            b = tk.Button(
-                qrow, text=f"All → {label}",
-                command=lambda v=value, l=label: self.quick_switch_all(v, l),
-                relief="flat", font=("Segoe UI Semibold", 10),
-                padx=14, pady=8, cursor="hand2", bd=0, highlightthickness=1,
-            )
-            self._track(b, {"bg": "panel2", "fg": "txt", "activebackground": "panel",
-                            "activeforeground": "acc", "highlightbackground": "line"})
-            b.pack(side="left", padx=(0, 8))
-
-        # workspace buttons area
-        ttk.Label(self, text="WORKSPACES", style="Muted.TLabel").pack(anchor="w", padx=18, pady=(12, 2))
+        # workspaces - the primary way to switch (one click each)
+        ttk.Label(self, text="SWITCH", style="Muted.TLabel").pack(anchor="w", padx=18, pady=(12, 2))
         self.ws_frame = ttk.Frame(self)
         self.ws_frame.pack(fill="x", padx=18)
 
-        # toolbar
+        # primary action bar: configure + edit on the left, Exit on the right
         bar = ttk.Frame(self)
         bar.pack(fill="x", padx=18, pady=12)
-        ttk.Button(bar, text="Detect Monitors", command=self.detect_monitors).pack(side="left")
-        ttk.Button(bar, text="Set up switching", command=self.start_guided_setup, style="Accent.TButton").pack(side="left", padx=6)
-        ttk.Button(bar, text="Setup / Edit Workspaces", command=self.open_setup).pack(side="left")
-        ttk.Button(bar, text="How it works", command=self._show_how_it_works).pack(side="left", padx=6)
-        ttk.Button(bar, text="Check for Updates", command=lambda: self.check_updates(manual=True)).pack(side="right")
-        ttk.Button(bar, text="Quit", command=self._quit_app).pack(side="right", padx=(0, 6))
+        ttk.Button(bar, text="Set Up Switching", command=self.start_guided_setup,
+                   style="Accent.TButton").pack(side="left")
+        ttk.Button(bar, text="Edit Workspaces", command=self.open_setup).pack(side="left", padx=6)
+        ttk.Button(bar, text="Exit", command=self._quit_app).pack(side="right")
 
-        # log
+        # activity log (fixed strip at the bottom)
         ttk.Label(self, text="ACTIVITY", style="Muted.TLabel").pack(anchor="w", padx=18, pady=(6, 2))
         logwrap = ttk.Frame(self)
-        logwrap.pack(fill="both", expand=True, padx=18, pady=(0, 16))
-        self.log = tk.Text(logwrap, height=10, relief="flat", font=("Cascadia Mono", 9), wrap="word")
+        logwrap.pack(fill="x", padx=18, pady=(0, 16))
+        self.log = tk.Text(logwrap, height=7, relief="flat", font=("Cascadia Mono", 9), wrap="word")
         self._track(self.log, {"bg": "panel", "fg": "txt", "insertbackground": "txt"})
         self.log.pack(side="left", fill="both", expand=True)
         sb = ttk.Scrollbar(logwrap, command=self.log.yview)
@@ -305,6 +282,46 @@ class App(tk.Tk):
         self.log.configure(yscrollcommand=sb.set, state="disabled")
 
         self._draw_header()
+
+    # ---------- overflow menu (theme / color / updates / help) ----------
+    def _build_overflow_menu(self):
+        m = tk.Menu(self, tearoff=0)
+        self._overflow = m
+        self._style_overflow_menu()
+        m.add_command(label="Toggle Light / Dark", command=self._toggle_theme)
+        m.add_command(label="Accent color\u2026", command=self._open_accent_picker)
+        m.add_separator()
+        m.add_command(label="How it works", command=self._show_how_it_works)
+        m.add_command(label="Check for updates", command=lambda: self.check_updates(manual=True))
+        m.add_separator()
+        m.add_command(label=f"About  (v{VERSION})", command=self._show_about)
+
+    def _style_overflow_menu(self):
+        m = getattr(self, "_overflow", None)
+        if m is None:
+            return
+        try:
+            m.configure(bg=C("panel"), fg=C("txt"), activebackground=C("acc"),
+                        activeforeground=C("acc_ink"), bd=0, relief="flat")
+        except tk.TclError:
+            pass
+
+    def _open_overflow_menu(self):
+        self._style_overflow_menu()
+        x = self.menu_btn.winfo_rootx()
+        y = self.menu_btn.winfo_rooty() + self.menu_btn.winfo_height()
+        try:
+            self._overflow.tk_popup(x, y)
+        finally:
+            self._overflow.grab_release()
+
+    def _show_about(self):
+        messagebox.showinfo(
+            "About",
+            f"{APP_TITLE}\nv{VERSION}\n\n"
+            "A software KVM for monitor inputs - flip your monitors between\n"
+            "computers over DDC/CI. github.com/phurteau/monitor-kvm",
+            parent=self)
 
     # ---------- header gradient + accent glow ----------
     def _draw_header(self):
@@ -376,7 +393,7 @@ class App(tk.Tk):
             w.destroy()
         if not self.store.workspaces:
             ttk.Label(self.ws_frame,
-                      text="No workspaces yet. Click 'Setup / Edit Workspaces' to create one.",
+                      text="No workspaces yet - click 'Set Up Switching' below to create them.",
                       style="Muted.TLabel").pack(anchor="w", pady=6)
             return
         row = ttk.Frame(self.ws_frame)
@@ -400,47 +417,6 @@ class App(tk.Tk):
         ws = self.store.get(name)
         if ws:
             self.apply_workspace(ws)
-
-    # ---------- quick switch (all monitors -> one input) ----------
-    def quick_switch_all(self, value: int, label: str):
-        def work():
-            live = self.detected or ddc.list_monitors()
-            controllable = [m for m in live]
-            if not controllable:
-                self._post(lambda: self._log("Quick switch: no monitors detected."))
-                return
-            self._post(lambda: self._log(f"Quick switch: sending all monitors → {label} (0x{value:02X})…"))
-            applied = ignored = fail = 0
-            for m in controllable:
-                try:
-                    ok, readback = ddc.set_input_source_verified(m, value)
-                    if ok:
-                        applied += 1
-                        self._post(lambda m=m: self._log(f"  \u2713 {m.display_label} → {label} (confirmed)"))
-                    elif readback is None:
-                        applied += 1  # can't verify (monitor dropped DDC on the old input) - assume sent
-                        self._post(lambda m=m: self._log(f"  \u2713 {m.display_label} → {label} (sent; couldn't read back to confirm)"))
-                    else:
-                        ignored += 1
-                        rb = f"0x{readback:02X}"
-                        self._post(lambda m=m, rb=rb: self._log(
-                            f"  \u26a0 {m.display_label}: sent {label} but monitor still reports {rb} - "
-                            f"it ignored this code (wrong value for this monitor, or that input has no signal)."))
-                except Exception as e:  # noqa: BLE001
-                    fail += 1
-                    self._post(lambda e=e, m=m: self._log(f"  ! {m.name or m.stable_id}: {e}"))
-            summary = f"Quick switch done: {applied} confirmed"
-            if ignored:
-                summary += f", {ignored} not applied"
-            if fail:
-                summary += f", {fail} failed"
-            self._post(lambda: self._log(summary + "."))
-            if ignored and not applied:
-                self._post(lambda: self._log(
-                    "Tip: if the OTHER PC is off/asleep, turn it on first (monitors won't switch to a dead input). "
-                    "Otherwise your monitor may use a non-standard code - use Setup → Workspaces → Test to find the one that works."))
-            self._post(self.refresh_layout)
-        threading.Thread(target=work, daemon=True).start()
 
     # ---------- how it works ----------
     def _show_how_it_works(self):
@@ -877,50 +853,6 @@ class App(tk.Tk):
                               "your monitor may block DDC input-switching - check that DDC/CI "
                               "is enabled in its on-screen menu.")
             self._post(done)
-        threading.Thread(target=work, daemon=True).start()
-
-    def scan_all_monitors(self):
-        """Scan every detected monitor, one after another, and report the codes
-        each accepts. The most discoverable way to find your real input codes."""
-        mons = self.detected or []
-        if not mons:
-            self._log("Find input codes: no monitors detected yet - detecting now…")
-            self.detect_monitors()
-            return
-        if not messagebox.askyesno(
-                "Find input codes",
-                f"This will briefly cycle each of your {len(mons)} monitor(s) through every known "
-                "input code to discover which ones they accept, then restore them.\n\n"
-                "Screens may flicker or show 'no signal' for a few seconds each. Keep the other "
-                "PC(s) powered on.\n\nProceed?",
-                parent=self):
-            return
-
-        def work():
-            for m in mons:
-                label = m.name or m.display_label
-                accepted = []
-
-                def prog(v, ok, rb, accepted=accepted):
-                    if ok:
-                        accepted.append(v)
-                        self._post(lambda v=v: self._log(
-                            f"    accepts: {friendly_label_for_value(v)} (0x{v:02X})"))
-
-                self._post(lambda label=label: self._log(f"[Scan] {label}: scanning…"))
-                try:
-                    ddc.scan_inputs(m, SCAN_CANDIDATES, progress=prog)
-                except Exception as e:  # noqa: BLE001
-                    self._post(lambda e=e, label=label: self._log(f"[Scan] {label}: failed: {e}"))
-                    continue
-                if accepted:
-                    names = ", ".join(f"{friendly_label_for_value(v)} (0x{v:02X})" for v in accepted)
-                    self._post(lambda names=names, label=label: self._log(f"[Scan] {label}: accepts -> {names}"))
-                else:
-                    self._post(lambda label=label: self._log(
-                        f"[Scan] {label}: no code confirmed (check DDC/CI is on in its menu)."))
-            self._post(lambda: self._log("Find input codes: done. Use a confirmed code in a workspace or via the map."))
-            self._post(self.refresh_layout)
         threading.Thread(target=work, daemon=True).start()
 
     # ---------- guided switching setup ----------
