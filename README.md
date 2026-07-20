@@ -18,9 +18,9 @@ A **token-based dual theme** (true-black **dark** default, plus a soft off-white
 **light** mode) is used throughout, driven by a single user-chosen **accent color**
 picked from an **HSV color wheel** - the accent recolors every highlight (buttons,
 active states, the primary-monitor ring, header glow) while all surfaces stay neutral.
-Theme + accent persist across launches. An optional **system-tray icon** lets you
-switch workspaces without opening the window, and a built-in **updater** shows a
-one-click banner when a new release is available.
+Theme + accent persist across launches. Theme, color, help, and updates live in the
+top-right **Menu**. A built-in **updater** shows a one-click banner when a new release
+is available. The window is fully resizable, and **Exit** fully closes the app.
 
 ---
 
@@ -97,27 +97,27 @@ as a workspace. That works for any monitor OSD, not just a specific brand.
 
 ## First‑time setup (do this once, on the rig with the monitors)
 
-1. **Launch the app**: double‑click **`Monitor Switcher.cmd`** (or run
-   `python app.py`).
-2. Click **Detect Monitors** - you should see your attached displays and the
-   input each is currently on.
-3. Click **Setup / Edit Workspaces → Monitors & Capture tab**. There are two ways
-   to make a workspace:
-   - **Capture** - reads the input the monitors are on *right now*. Use this on the
-     machine you're sitting at (e.g. capture **`Personal`** while on Personal).
-   - **New workspace → choose target input…** - pick the input you want the
-     monitors to switch *to*. Use this to build the "go to the other PC" profile you
-     can't capture (e.g. on the Work PC, build **`Go to Personal`** = all monitors →
-     DisplayPort).
-4. Click **Refresh / Read current inputs**, then either **Capture these as a new
-   workspace…** or **New workspace → choose target input…**, and name it.
-5. Do the mirror on the other machine (e.g. **`Go to Work`** = all monitors → HDMI).
-6. Back on the main window you'll have big **SWITCH** buttons. One click applies
-   the switch.
+The easy way - let the app figure out your input codes for you:
+
+1. **Launch the app**: run the downloaded **`MonitorWorkspaceSwitcher.exe`** (or from
+   source, double‑click **`Monitor Switcher.cmd`** / run `python app.py`).
+2. Click **Set Up Switching**. For each monitor it tries every possible input one at
+   a time - **watch the monitor** and click **"Yes - it switched!"** when it flips to
+   your other computer, or **"No - try next."**
+3. When you confirm, it saves your **Personal** and **Work** workspaces automatically.
+   The big **SWITCH** buttons on the main window then flip your monitors with one click.
+
+Prefer to build workspaces by hand? Click **Edit Workspaces** instead:
+
+- **Capture** - saves the input the monitors are on *right now* (use it on the machine
+  you're sitting at, e.g. capture **`Personal`** while on Personal).
+- **New workspace → choose target input…** - pick the input to switch *to*, to build
+  the "go to the other PC" profile you can't capture.
+- Use **Test** / **Scan** on a monitor to confirm which input code actually works.
 
 ### Leaving some monitors alone
 
-A workspace doesn't have to touch every monitor. In **Setup → Workspaces**, each
+A workspace doesn't have to touch every monitor. In **Edit Workspaces**, each
 monitor has an input dropdown that includes **"Leave unchanged (do nothing)"** -
 pick that for any monitor you *don't* want this workspace to switch. For example,
 if only two of your three monitors are shared between the two PCs, set the third to
@@ -152,12 +152,13 @@ Results are appended to `switch.log`.
 
 ---
 
-## Switch from the system tray (no window)
+## Switch from the system tray
 
-If `pystray` + `pillow` are installed, a green monitor icon appears in the tray on
-launch. **Right-click it** for a menu of your workspaces - click one to flip all
-monitors instantly. **Closing the window minimizes to the tray** (it keeps running);
-use the tray's **Quit** to exit fully, or **Open Switcher** to bring the window back.
+If `pystray` + `pillow` are installed, a green monitor icon appears in the tray while
+the app is open. **Right-click it** for a menu of your workspaces - click one to flip
+all monitors instantly, or use **Open Switcher** / **Quit**. **Closing the window (or
+clicking Exit) fully closes the app** and ends the process - nothing is left running
+in the background.
 
 ## Set an input by clicking the map
 
@@ -168,7 +169,7 @@ if a value lands on the wrong source, just try another.
 
 ## Updates
 
-On launch (and via **Check for Updates**), the app asks GitHub whether a newer
+On launch (and via **Menu → Check for updates**), the app asks GitHub whether a newer
 release of `phurteau/monitor-kvm` exists. If so, a **green banner** appears at the
 top: click **Download & Update** to fetch the release, apply it in place (your
 `profiles.json` is preserved), then **Restart now** to finish. Uses only the Python
@@ -191,7 +192,9 @@ neutral, so any accent looks good. From the accent, the engine derives a brighte
 companion (`acc2`, for hovers/glows) and an ink color (auto black/white) that keeps
 text readable on accent fills.
 
-- **Toggle Light/Dark** - top‑right button.
+Both live in the top-right **Menu**:
+
+- **Toggle Light / Dark**.
 - **Accent color…** - opens an **HSV color wheel**: drag around the wheel (hue = angle,
   saturation = distance from center), use the **Brightness** slider, or type a `#rrggbb`
   hex. Changes apply live; **Reset to default** restores the default accent (`#025500`).
