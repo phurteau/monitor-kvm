@@ -314,6 +314,7 @@ class App(tk.Tk):
         m.add_command(label="How it works", command=self._show_how_it_works)
         m.add_command(label="Check for updates", command=lambda: self.check_updates(manual=True))
         m.add_separator()
+        m.add_command(label="Uninstall\u2026", command=self._uninstall)
         m.add_command(label=f"About  (v{VERSION})", command=self._show_about)
 
     def _style_overflow_menu(self):
@@ -342,6 +343,26 @@ class App(tk.Tk):
             "A software KVM for monitor inputs - flip your monitors between\n"
             "computers over DDC/CI. github.com/phurteau/monitor-kvm",
             parent=self)
+
+    def _uninstall(self):
+        import uninstall as uninst
+        app_dir = None
+        if getattr(sys, "frozen", False):
+            app_dir = os.path.dirname(os.path.abspath(sys.executable))
+        t = uninst.find_targets(app_dir)
+        lines = ["This removes Monitor Workspace Switcher and all its data:", "",
+                 "  Settings & workspaces: " + (t["data_dir"] or "none found"),
+                 "  Desktop shortcuts: " + (f"{len(t['shortcuts'])} found" if t["shortcuts"] else "none"),
+                 "  Registry entries: " + (", ".join(t["registry"]) if t["registry"] else "none")]
+        if t["app_dir"]:
+            lines.append("  App folder: " + t["app_dir"])
+        lines += ["", "The app will close. This cannot be undone. Continue?"]
+        if not messagebox.askyesno("Uninstall", "\n".join(lines), icon="warning", parent=self):
+            return
+        results = uninst.run_uninstall(remove_app_folder=True, app_dir=app_dir)
+        messagebox.showinfo("Uninstall complete",
+                            "\n".join(results) + "\n\nThe app will now close.", parent=self)
+        self._quit_app()
 
     # ---------- header gradient + accent glow ----------
     def _draw_header(self):

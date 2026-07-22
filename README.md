@@ -203,6 +203,29 @@ Your theme + accent are saved to `settings.json` (gitignored) and restored on la
 
 ---
 
+## Uninstalling
+
+The app is portable - there's no Windows installer, so it never writes an
+"install" registry entry. To remove it completely, use either:
+
+- **In the app:** **Menu → Uninstall…** - shows exactly what will be removed, then
+  clears it and closes the app.
+- **Standalone:** run **`Uninstall.exe`** (included in the `-windows.zip` folder
+  build), or from source `python uninstall.py` (add `--yes` to skip the prompt).
+
+It removes everything the app creates:
+
+- Your settings & workspaces in `%APPDATA%\MonitorWorkspaceSwitcher\`
+  (`profiles.json`, `settings.json`, `switch.log`).
+- Desktop shortcuts it made (`Monitors - *.lnk`, `Monitor Switcher (Setup).lnk`).
+- Any startup registry value pointing at the app (defensive - the app doesn't add
+  one, but a manually-added `HKCU\...\Run` entry is cleaned if found).
+- The app's own folder (the folder build deletes itself right after it closes).
+
+Unrelated files are never touched. Nothing else is left behind.
+
+---
+
 ## Files
 
 | File | Purpose |
@@ -213,13 +236,14 @@ Your theme + accent are saved to `settings.json` (gitignored) and restored on la
 | `layout.py` | Reads the live Windows display arrangement (position, size, orientation, primary) via Win32 |
 | `tray.py` | Optional system-tray icon for switching workspaces without the window |
 | `updater.py` | Checks GitHub Releases and applies one-click updates in place |
+| `uninstall.py` | Fully removes app data, shortcuts, registry entries, and the app folder |
 | `version.py` | Current `VERSION` and the GitHub repo the updater checks |
 | `switch.py` | Headless one‑click apply of a named workspace |
 | `make_shortcuts.py` | Generates desktop shortcuts per workspace |
 | `ddc.py` | DDC/CI backend (wraps ControlMyMonitor.exe) |
 | `vcp_inputs.py` | Reference table of input‑source values across vendors |
 | `profiles.py` | Load/save `profiles.json` |
-| `profiles.json` | Your saved workspaces (created after first capture) |
+| `assets\make_icon.py` | Generates the app icon (`icon.ico` + PNGs) |
 | `tools\ControlMyMonitor.exe` | NirSoft DDC/CI tool (backend) |
 | `Monitor Switcher.cmd` | No‑console GUI launcher |
 
