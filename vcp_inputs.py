@@ -89,7 +89,7 @@ FRIENDLY_INPUTS = [
 ]
 
 
-# Sentinel meaning "leave this monitor's input alone" - a workspace assignment
+# Sentinel meaning "leave this monitor's input alone". A workspace assignment
 # with this value is skipped when applying (the monitor is not touched). Real
 # VCP 0x60 values are 0-255, so -1 can never collide with a genuine input.
 SKIP_INPUT = -1
@@ -113,12 +113,12 @@ def input_menu(include_skip: bool = False):
     """Build the dropdown for choosing an input.
 
     Returns (display_list, {display_string: value}). Friendly names come first,
-    then a separator, then the full advanced list - and the returned dict maps
+    then a separator, then the full advanced list, and the returned dict maps
     every display string straight to its integer value, so callers never parse
     hex out of a label (that was fragile and error-prone).
 
     When include_skip is True, a "Leave unchanged (do nothing)" entry is added
-    at the very top, mapping to SKIP_INPUT - used in the workspace editor so a
+    at the very top, mapping to SKIP_INPUT, used in the workspace editor so a
     monitor can be excluded from a workspace without switching it.
     """
     display = []

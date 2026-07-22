@@ -1,5 +1,5 @@
 """
-Token-based dual-theme engine - a tkinter port of the CSS custom-property
+Token-based dual-theme engine. A tkinter port of the CSS custom-property
 design system.
 
 Web original used CSS variables on :root (overridden per data-theme) plus a

@@ -1,5 +1,5 @@
 """
-HSV color-wheel accent picker (tkinter + PIL) - a port of the web accent picker.
+HSV color-wheel accent picker (tkinter + PIL). A port of the web accent picker.
 
   * Circular HSV wheel: hue = angle around the circle, saturation = distance
     from center. A draggable dot marks the current hue/sat.

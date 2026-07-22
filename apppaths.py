@@ -7,7 +7,7 @@ PyInstaller .exe.
                    use the project directory.
   data_dir()     : a stable, user-writable folder for profiles.json / settings.json /
                    switch.log. Frozen exes must NOT write next to the exe (may be in
-                   Program Files) or into _MEIPASS (temp, wiped each run) - so use
+                   Program Files) or into _MEIPASS (temp, wiped each run), so use
                    %APPDATA%\\MonitorWorkspaceSwitcher. Source runs keep everything in
                    the project directory (unchanged behavior).
 """

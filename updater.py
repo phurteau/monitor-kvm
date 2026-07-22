@@ -157,7 +157,7 @@ def _apply_frozen(download_url: str) -> tuple[bool, str]:
     if saved:
         return True, (f"Downloaded the new version to:\n{saved}\n"
                       "Close this app, unzip, and run the new .exe (opened the releases page too).")
-    return True, ("Opened the releases page in your browser - download the new .exe there, "
+    return True, ("Opened the releases page in your browser. Download the new .exe there, "
                   "then close and replace this one.")
 
 

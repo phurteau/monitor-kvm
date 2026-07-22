@@ -67,7 +67,7 @@ def main() -> int:
     for m in made:
         print("  " + m)
     if not store.workspaces:
-        print("\nNote: no workspaces defined yet - only the Setup shortcut was made.")
+        print("\nNote: no workspaces defined yet. Only the Setup shortcut was made.")
         print("Open Setup, capture your inputs as 'Personal' and 'Work', then re-run this.")
     return 0
 

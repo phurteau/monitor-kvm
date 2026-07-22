@@ -89,20 +89,20 @@ class App(tk.Tk):
         self._build_style()
         self._build_ui()
         self._refresh_workspace_buttons()
-        self._log("Ready. Reading your display layout…")
+        self._log("Ready. Reading your display layout...")
         T.subscribe(self._apply_theme)
         self.after(80, self._pump)
         self.after(200, self.refresh_layout)
         self.after(1500, lambda: self.check_updates(manual=False))
 
         # system tray (optional). Closing the window (X) QUITS the app fully so
-        # the process exits and the .exe file is released - no lingering
+        # the process exits and the .exe file is released, no lingering
         # background process. The tray is a convenience while the app is open.
         self.tray = tray_mod.Tray(self)
         if self.tray.start():
-            self._log("System tray active - right-click the tray icon to switch workspaces.")
+            self._log("System tray active. Right-click the tray icon to switch workspaces.")
         else:
-            self._log("System tray unavailable (pystray not installed) - window mode only.")
+            self._log("System tray unavailable (pystray not installed). Window mode only.")
         self.protocol("WM_DELETE_WINDOW", self._quit_app)
 
     # ---------- thread-safe UI marshalling ----------
@@ -277,7 +277,7 @@ class App(tk.Tk):
         ttk.Label(self, text="Tip: click a display to set its input manually.",
                   style="Muted.TLabel").pack(anchor="w", padx=18, pady=(2, 0))
 
-        # workspaces - the primary way to switch (one click each)
+        # workspaces, the primary way to switch (one click each)
         ttk.Label(self, text="SWITCH", style="Muted.TLabel").pack(anchor="w", padx=18, pady=(12, 2))
         self.ws_frame = ttk.Frame(self)
         self.ws_frame.pack(fill="x", padx=18)
@@ -309,12 +309,12 @@ class App(tk.Tk):
         self._overflow = m
         self._style_overflow_menu()
         m.add_command(label="Toggle Light / Dark", command=self._toggle_theme)
-        m.add_command(label="Accent color\u2026", command=self._open_accent_picker)
+        m.add_command(label="Accent color...", command=self._open_accent_picker)
         m.add_separator()
         m.add_command(label="How it works", command=self._show_how_it_works)
         m.add_command(label="Check for updates", command=lambda: self.check_updates(manual=True))
         m.add_separator()
-        m.add_command(label="Uninstall\u2026", command=self._uninstall)
+        m.add_command(label="Uninstall...", command=self._uninstall)
         m.add_command(label=f"About  (v{VERSION})", command=self._show_about)
 
     def _style_overflow_menu(self):
@@ -340,7 +340,7 @@ class App(tk.Tk):
         messagebox.showinfo(
             "About",
             f"{APP_TITLE}\nv{VERSION}\n\n"
-            "A software KVM for monitor inputs - flip your monitors between\n"
+            "A software KVM for monitor inputs: flip your monitors between\n"
             "computers over DDC/CI. github.com/phurteau/monitor-kvm",
             parent=self)
 
@@ -434,7 +434,7 @@ class App(tk.Tk):
             w.destroy()
         if not self.store.workspaces:
             ttk.Label(self.ws_frame,
-                      text="No workspaces yet - click 'Set Up Switching' below to create them.",
+                      text="No workspaces yet. Click 'Set Up Switching' below to create them.",
                       style="Muted.TLabel").pack(anchor="w", pady=6)
             return
         row = ttk.Frame(self.ws_frame)
@@ -474,7 +474,7 @@ class App(tk.Tk):
 
         body = (
             "This app controls your MONITORS over DDC/CI (the same channel their\n"
-            "on-screen menu uses) - it does not control the other PC.\n\n"
+            "on-screen menu uses). It does not control the other PC.\n\n"
             "The golden rule:\n"
             "    You switch AWAY from the PC you're currently looking at.\n\n"
             "A monitor reliably obeys DDC/CI only from the PC that's currently on\n"
@@ -526,7 +526,7 @@ class App(tk.Tk):
             self.destroy()    # tear down all Tk windows
         except Exception:  # noqa: BLE001
             pass
-        # Guaranteed termination - pystray/other daemon threads can otherwise
+        # Guaranteed termination: pystray/other daemon threads can otherwise
         # keep the frozen exe's process alive (and the file locked).
         import os
         os._exit(0)
@@ -548,7 +548,7 @@ class App(tk.Tk):
     def _show_banner(self, info):
         self._banner_info = info
         self._style_banner()
-        notes = f"  -  {info.notes.splitlines()[0]}" if info.notes else ""
+        notes = f"  ({info.notes.splitlines()[0]})" if info.notes else ""
         self.banner_label.config(text=f"Update available:  v{info.current}  \u2192  v{info.latest}{notes}")
         self.banner_btn.config(text="Download & Update", state="normal",
                                command=lambda: self._do_update(info))
@@ -562,8 +562,8 @@ class App(tk.Tk):
             pass
 
     def _do_update(self, info):
-        self.banner_btn.config(text="Updating…", state="disabled")
-        self._log(f"Downloading update v{info.latest}…")
+        self.banner_btn.config(text="Updating...", state="disabled")
+        self._log(f"Downloading update v{info.latest}...")
 
         def work():
             ok, msg = updater.download_and_apply(info.download_url)
@@ -617,7 +617,7 @@ class App(tk.Tk):
                 lines.append(f"        current input: {cur_txt}")
             self._post( lambda: self._log("\n".join(lines)))
         threading.Thread(target=work, daemon=True).start()
-        self._log("Detecting monitors…")
+        self._log("Detecting monitors...")
 
     def self_test(self):
         def work():
@@ -627,7 +627,7 @@ class App(tk.Tk):
 
     def apply_workspace(self, ws: profiles.Workspace):
         def work():
-            self._post( lambda: self._log(f"Applying workspace '{ws.name}'…"))
+            self._post( lambda: self._log(f"Applying workspace '{ws.name}'..."))
             live = {m.stable_id: m for m in (self.detected or ddc.list_monitors())}
             ok, miss, left, ignored = 0, 0, 0, 0
             for a in ws.assignments:
@@ -639,7 +639,7 @@ class App(tk.Tk):
                 if not m:
                     # try to match by index fallback
                     miss += 1
-                    self._post( lambda a=a: self._log(f"  ! monitor '{a.monitor_label}' ({a.monitor_id}) not currently attached - skipped"))
+                    self._post( lambda a=a: self._log(f"  ! monitor '{a.monitor_label}' ({a.monitor_id}) not currently attached, skipped"))
                     continue
                 try:
                     applied_ok, readback = ddc.set_input_source_verified(m, a.value)
@@ -648,13 +648,13 @@ class App(tk.Tk):
                         ok += 1
                         self._post( lambda a=a, label=label: self._log(f"  \u2713 {a.monitor_label} -> {label} (0x{a.value:02X}) confirmed"))
                     elif readback is None:
-                        ok += 1  # couldn't read back (monitor dropped DDC on old input) - assume sent
+                        ok += 1  # couldn't read back (monitor dropped DDC on old input), assume sent
                         self._post( lambda a=a, label=label: self._log(f"  \u2713 {a.monitor_label} -> {label} (sent; couldn't read back to confirm)"))
                     else:
                         ignored += 1
                         rb = f"0x{readback:02X}"
                         self._post( lambda a=a, label=label, rb=rb: self._log(
-                            f"  \u26a0 {a.monitor_label}: sent {label} but still reports {rb} - code ignored."))
+                            f"  \u26a0 {a.monitor_label}: sent {label} but still reports {rb}, code ignored."))
                 except Exception as e:
                     miss += 1
                     self._post( lambda e=e, a=a: self._log(f"  ! {a.monitor_label}: {e}"))
@@ -668,7 +668,7 @@ class App(tk.Tk):
             self._post( lambda: self._log(summary + "."))
             if ignored and not ok:
                 self._post( lambda: self._log(
-                    "Tip: turn the target PC on first (monitors won't switch to a dead input), or the code is wrong - "
+                    "Tip: turn the target PC on first (monitors won't switch to a dead input), or the code is wrong; "
                     "use Setup → Workspaces → Test to find the input value that actually switches."))
             self._post(self.refresh_layout)
         threading.Thread(target=work, daemon=True).start()
@@ -721,7 +721,7 @@ class App(tk.Tk):
         cw = c.winfo_width() or 700
         ch = c.winfo_height() or 210
         if not items:
-            c.create_text(cw // 2, ch // 2, text="No displays read yet - click Refresh",
+            c.create_text(cw // 2, ch // 2, text="No displays read yet. Click Refresh",
                           fill=C("dim"), font=("Segoe UI", 10))
             return
 
@@ -766,7 +766,7 @@ class App(tk.Tk):
 
             name = d.friendly or d.device_name.replace("\\\\.\\", "")
             if len(name) > 20:
-                name = name[:19] + "\u2026"
+                name = name[:19] + "..."
             res = f"{d.width}\u00d7{d.height}"
             orient = "Portrait" if d.is_portrait else "Landscape"
             prim = "  \u2605" if d.primary else ""
@@ -816,7 +816,7 @@ class App(tk.Tk):
         combo, get_value = _make_input_combo(top, current_value=cur, width=34)
         combo.pack(padx=12, pady=10)
 
-        tk.Label(top, text="Setting an input may switch this monitor to another\nmachine - use its physical buttons to return if needed.",
+        tk.Label(top, text="Setting an input may switch this monitor to another\nmachine. Use its physical buttons to return if needed.",
                  bg=panel, fg=dim, font=("Segoe UI", 8), justify="left").pack(anchor="w", padx=12)
 
         btns = tk.Frame(top, bg=panel)
@@ -866,7 +866,7 @@ class App(tk.Tk):
                 "PC powered on so its input lights up.\n\nProceed?",
                 parent=self):
             return
-        self._log(f"[Scan] {label}: scanning input codes… (~20s, screen may flicker)")
+        self._log(f"[Scan] {label}: scanning input codes... (~20s, screen may flicker)")
 
         def work():
             accepted = []
@@ -891,7 +891,7 @@ class App(tk.Tk):
                               "(click the monitor again, or Setup -> Workspaces).")
                 else:
                     self._log(f"[Scan] {label}: no code confirmed. If the other PC is on, "
-                              "your monitor may block DDC input-switching - check that DDC/CI "
+                              "your monitor may block DDC input-switching. Check that DDC/CI "
                               "is enabled in its on-screen menu.")
             self._post(done)
         threading.Thread(target=work, daemon=True).start()
@@ -900,7 +900,7 @@ class App(tk.Tk):
     def start_guided_setup(self):
         mons = self.detected or []
         if not mons:
-            self._log("Set up switching: detecting monitors first…")
+            self._log("Set up switching: detecting monitors first...")
             self.detect_monitors()
             self.after(1500, self.start_guided_setup)
             return
@@ -974,11 +974,11 @@ class GuidedSwitchWizard(tk.Toplevel):
 
         self.btns = tk.Frame(self, bg=panel)
         self.btns.pack(side="bottom", fill="x", padx=18, pady=16)
-        self.yes_btn = tk.Button(self.btns, text="Yes - it switched!", command=self._on_yes,
+        self.yes_btn = tk.Button(self.btns, text="Yes, it switched!", command=self._on_yes,
                                  bg=acc, fg=C("acc_ink"), activebackground=C("acc2"),
                                  activeforeground=C("acc_ink"), relief="flat",
                                  font=("Segoe UI Semibold", 10), padx=14, pady=7, cursor="hand2", bd=0)
-        self.no_btn = tk.Button(self.btns, text="No - try next", command=self._on_no,
+        self.no_btn = tk.Button(self.btns, text="No, try next", command=self._on_no,
                                 bg=C("panel2"), fg=txt, activebackground=panel, activeforeground=txt,
                                 relief="flat", font=("Segoe UI", 10), padx=12, pady=7, cursor="hand2",
                                 highlightthickness=1, highlightbackground=C("line"), bd=0)
@@ -1016,9 +1016,9 @@ class GuidedSwitchWizard(tk.Toplevel):
         self.h.config(text=f"Monitor {self._mi + 1} of {len(self.monitors)}:  {self._mlabel()}")
         self.body.config(text=(
             "Watch THIS monitor. I'll try each possible input one at a time.\n"
-            "When it switches to your OTHER computer, click \u201cYes - it switched!\u201d.\n"
-            "If nothing happens, click \u201cNo - try next\u201d."))
-        self.status.config(text="Reading current input…")
+            "When it switches to your OTHER computer, click \"Yes, it switched!\".\n"
+            "If nothing happens, click \"No, try next\"."))
+        self.status.config(text="Reading current input...")
         self._set_busy(True)
 
         def work():
@@ -1037,7 +1037,7 @@ class GuidedSwitchWizard(tk.Toplevel):
         m = self._cur_monitor()
         code = self._candidates[self._ci]
         name = friendly_label_for_value(code)
-        self.status.config(text=f"Trying:  {name}  (0x{code:02X})   -   did the monitor switch?")
+        self.status.config(text=f"Trying:  {name}  (0x{code:02X}).  Did the monitor switch?")
         self._set_busy(True)
 
         def work():
@@ -1066,7 +1066,7 @@ class GuidedSwitchWizard(tk.Toplevel):
         orig_label = friendly_label_for_value(orig) if orig is not None else "current input"
         self._found_any = True
         self._set_busy(True)
-        self.status.config(text=f"Saved {self._mlabel()} → {found_label}. Switching back…")
+        self.status.config(text=f"Saved {self._mlabel()} → {found_label}. Switching back...")
 
         # Build workspaces: current input = "Personal" (this PC), found = "Work" (other PC).
         if orig is not None:
@@ -1096,12 +1096,12 @@ class GuidedSwitchWizard(tk.Toplevel):
             except Exception:  # noqa: BLE001
                 pass
         self.app._log(f"[Setup] {self._mlabel()}: no code switched it. This monitor probably "
-                      f"can't be switched by software (DDC/CI input-switch not supported) - "
-                      f"you'd need its physical Input button.")
+                      f"can't be switched by software (DDC/CI input-switch not supported). "
+                      f"You'd need its physical Input button.")
         messagebox.showinfo(
             "No working code",
             f"'{self._mlabel()}' didn't switch on any code. This monitor likely doesn't support "
-            "input switching over DDC/CI (some don't), so software can't flip it - use the "
+            "input switching over DDC/CI (some don't), so software can't flip it. Use the "
             "monitor's physical Input button for this one.",
             parent=self)
         self._advance_monitor()
@@ -1133,7 +1133,7 @@ class GuidedSwitchWizard(tk.Toplevel):
                 "buttons on the main window to switch. Run this again any time to adjust.",
                 parent=self.app)
         else:
-            self.app._log("Set up switching: finished - no monitors could be switched by software.")
+            self.app._log("Set up switching: finished. No monitors could be switched by software.")
 
     def _stop(self):
         if self._busy:
@@ -1154,7 +1154,7 @@ class SetupWindow(tk.Toplevel):
     def __init__(self, app: App):
         super().__init__(app)
         self.app = app
-        self.title("Setup - Monitors & Workspaces")
+        self.title("Setup: Monitors & Workspaces")
         self.configure(bg=C("bg"))
         self.geometry("760x600")
         self.transient(app)
@@ -1187,13 +1187,13 @@ class SetupWindow(tk.Toplevel):
         btns = ttk.Frame(f)
         btns.pack(fill="x", padx=10, pady=8)
         ttk.Button(btns, text="Refresh / Read current inputs", command=self._refresh_tree).pack(side="left")
-        ttk.Button(btns, text="Capture these as a new workspace…", command=self._capture_workspace).pack(side="left", padx=6)
-        ttk.Button(btns, text="New workspace → choose target input…", command=self._new_manual_workspace).pack(side="left")
+        ttk.Button(btns, text="Capture these as a new workspace...", command=self._capture_workspace).pack(side="left", padx=6)
+        ttk.Button(btns, text="New workspace → choose target input...", command=self._new_manual_workspace).pack(side="left")
 
         tip = ("Two ways to make a workspace:\n"
-               "  • Capture - reads the inputs the monitors are on RIGHT NOW (use this on\n"
+               "  • Capture: reads the inputs the monitors are on RIGHT NOW (use this on\n"
                "    the machine you're sitting at, e.g. capture 'Personal' while on Personal).\n"
-               "  • Choose target input - pick the input you want the monitors to switch TO\n"
+               "  • Choose target input: pick the input you want the monitors to switch TO\n"
                "    (use this to build the 'go to the other PC' profile you can't capture,\n"
                "    e.g. on the Work PC build 'Go to Personal' = all monitors → DisplayPort).")
         ttk.Label(f, text=tip, style="Muted.TLabel", justify="left").pack(anchor="w", padx=10, pady=6)
@@ -1261,7 +1261,7 @@ class SetupWindow(tk.Toplevel):
 
     def _new_manual_workspace(self):
         """Build a workspace by choosing the target input all monitors should
-        switch TO - no need to be on that input to capture it."""
+        switch TO, no need to be on that input to capture it."""
         mons = self.app.detected
         if not mons:
             messagebox.showinfo("Detect first",
@@ -1271,7 +1271,7 @@ class SetupWindow(tk.Toplevel):
 
         panel, txt, acc, dim = C("panel"), C("txt"), C("acc"), C("dim")
         dlg = tk.Toplevel(self)
-        dlg.title("New workspace - choose target input")
+        dlg.title("New workspace: choose target input")
         dlg.configure(bg=panel)
         dlg.transient(self)
         dlg.resizable(False, False)
@@ -1299,7 +1299,7 @@ class SetupWindow(tk.Toplevel):
 
         tk.Label(dlg, text="Pick the input you want the monitors to switch TO (e.g. 'HDMI 2' to reach\n"
                            "the PC on your monitors' HDMI 2 port). If it doesn't switch, your monitor\n"
-                           "may use a non-standard code - try another from the list.",
+                           "may use a non-standard code. Try another from the list.",
                  bg=panel, fg=dim, font=("Segoe UI", 8), justify="left").pack(anchor="w", padx=16, pady=(6, 0))
 
         def create():
@@ -1378,12 +1378,12 @@ class SetupWindow(tk.Toplevel):
     def _show_ws_detail(self):
         ws = self._selected_ws()
         if not ws:
-            # No selection (e.g. a spurious event) - leave the current pane intact.
+            # No selection (e.g. a spurious event), leave the current pane intact.
             return
         for w in self.detail.winfo_children():
             w.destroy()
         ttk.Label(self.detail, text=f"Assignments for '{ws.name}'").pack(anchor="w")
-        ttk.Label(self.detail, text="Choose each monitor's input - or 'Leave unchanged' to\n"
+        ttk.Label(self.detail, text="Choose each monitor's input, or 'Leave unchanged' to\n"
                                     "not touch that monitor when this workspace is applied:",
                   style="Muted.TLabel").pack(anchor="w", pady=(0, 8))
 
@@ -1422,7 +1422,7 @@ class SetupWindow(tk.Toplevel):
         if val == SKIP_INPUT:
             messagebox.showinfo("Nothing to test",
                                 "This monitor is set to 'Leave unchanged', so there's nothing to "
-                                "switch - it will be skipped when the workspace is applied.",
+                                "switch, so it will be skipped when the workspace is applied.",
                                 parent=self)
             return
         live = {m.stable_id: m for m in (self.app.detected or [])}
@@ -1433,7 +1433,7 @@ class SetupWindow(tk.Toplevel):
                                    "Go to the Monitors tab and Refresh.", parent=self)
             return
         name = friendly_label_for_value(val)
-        self.app._log(f"[Test] {a.monitor_label} -> {name} (0x{val:02X}) - verifying…")
+        self.app._log(f"[Test] {a.monitor_label} -> {name} (0x{val:02X}): verifying...")
 
         def work():
             try:
@@ -1446,7 +1446,7 @@ class SetupWindow(tk.Toplevel):
             else:
                 rb = f"0x{readback:02X} ({friendly_label_for_value(readback)})" if readback is not None else "unreadable"
                 self.app._post(lambda rb=rb: self.app._log(
-                    f"[Test] {a.monitor_label}: monitor IGNORED {name} - still on {rb}. "
+                    f"[Test] {a.monitor_label}: monitor IGNORED {name}, still on {rb}. "
                     f"Wrong code for this monitor, or that input has no signal (turn the other PC on)."))
         threading.Thread(target=work, daemon=True).start()
 

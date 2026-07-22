@@ -1,14 +1,14 @@
 """
-Uninstaller - fully removes everything Monitor Workspace Switcher leaves on a PC.
+Uninstaller: fully removes everything Monitor Workspace Switcher leaves on a PC.
 
 The app is portable (no Windows installer), so there is no MSI/registry install
 entry to remove. What it DOES create, and what this removes:
 
-  * %APPDATA%\\MonitorWorkspaceSwitcher\\  - profiles.json, settings.json, switch.log
+  * %APPDATA%\\MonitorWorkspaceSwitcher\\: profiles.json, settings.json, switch.log
   * Desktop shortcuts created by make_shortcuts.py:
         "Monitors - <workspace>.lnk"  and  "Monitor Switcher (Setup).lnk"
         (on the normal Desktop and a OneDrive-redirected Desktop)
-  * Any HKCU "Run" startup registry value pointing at the app (defensive - the
+  * Any HKCU "Run" startup registry value pointing at the app (defensive: the
     app doesn't create one, but a user might have added one; we clean it if so).
   * Optionally the app's own folder / executable.
 
@@ -146,7 +146,7 @@ def _self_delete_app_dir(app_dir: str):
         except Exception:  # noqa: BLE001
             return "failed"
 
-    # We're inside it - use a delayed batch so the folder can be deleted after exit.
+    # We're inside it, so use a delayed batch so the folder can be deleted after exit.
     import tempfile
     bat = os.path.join(tempfile.gettempdir(), "mkvm_uninstall.bat")
     target = app_dir
