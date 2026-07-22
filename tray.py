@@ -18,6 +18,15 @@ except Exception:  # noqa: BLE001
 
 
 def _icon_image(accent=(0, 255, 0)):
+    # Prefer the real app icon; fall back to a simple drawn glyph.
+    try:
+        import os
+        from apppaths import resource_dir
+        png = os.path.join(resource_dir(), "assets", "icon_256.png")
+        if os.path.exists(png):
+            return Image.open(png).convert("RGBA")
+    except Exception:  # noqa: BLE001
+        pass
     img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
     col = (*accent, 255)

@@ -11,6 +11,7 @@ GUI: tkinter (stdlib, no external deps).
 
 from __future__ import annotations
 
+import os
 import queue
 import threading
 import tkinter as tk
@@ -22,6 +23,7 @@ import profiles
 import theme as theme_mod
 import tray as tray_mod
 import updater
+from apppaths import resource_dir
 from colorwheel import AccentPicker
 from theme import THEME as T
 from version import VERSION
@@ -76,6 +78,7 @@ class App(tk.Tk):
         self.configure(bg=C("bg"))
         self.geometry("720x760")
         self.minsize(560, 560)
+        self._set_window_icon()
 
         self.store = profiles.load()
         self.detected: list[ddc.Monitor] = []
@@ -136,6 +139,23 @@ class App(tk.Tk):
                 widget.configure(**{opt: C(key)})
             except tk.TclError:
                 pass
+
+    def _set_window_icon(self):
+        try:
+            ico = os.path.join(resource_dir(), "assets", "icon.ico")
+            if os.path.exists(ico):
+                self.iconbitmap(default=ico)
+                return
+        except tk.TclError:
+            pass
+        # PNG fallback (also used on non-Windows)
+        try:
+            png = os.path.join(resource_dir(), "assets", "icon_256.png")
+            if os.path.exists(png):
+                self._icon_img = tk.PhotoImage(file=png)
+                self.iconphoto(True, self._icon_img)
+        except tk.TclError:
+            pass
 
     def _build_style(self):
         style = ttk.Style(self)
