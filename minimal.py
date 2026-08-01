@@ -14,16 +14,21 @@ Design notes:
   * The bar owns no theme subscription of its own. The App is the single T
     subscriber and calls MiniBar.apply_theme(), so destroying the bar can never
     leak a callback.
-  * Width is content-driven (natural pack, no fixed geometry width); only the
-    x/y position is persisted, through settings.py, and clamped back into the
-    visible virtual desktop on open so a monitor change can't strand the bar
-    off-screen.
+  * Width is content-driven (natural pack, no fixed geometry width). Only the
+    x/y position and a scale factor are persisted, through settings.py. On open
+    the saved position is validated against the real per-display rectangles
+    (layout.get_displays) so a monitor change can't strand the bar in the
+    L-shaped dead space between staggered monitors; if it no longer fits any
+    real display it resets to a sane primary-display default.
+  * The pill has no native resize border, so a corner grip scales the whole bar
+    (fonts and paddings together) between SCALE_MIN and SCALE_MAX, remembered.
 """
 
 from __future__ import annotations
 
 import tkinter as tk
 
+import layout
 import settings
 from theme import THEME as T
 
@@ -31,11 +36,55 @@ from theme import THEME as T
 GRIP_GLYPH = "\u22ee"      # vertical ellipsis, the drag handle
 EXPAND_GLYPH = "\u2921"    # north-east/south-west arrow, "back to full view"
 CLOSE_GLYPH = "\u00d7"     # multiplication sign, "quit"
+RESIZE_GLYPH = "\u25e2"    # lower-right triangle, the scale/resize corner
+
+# The pill has no native resize border (it is overrideredirect), so the corner
+# grip scales the whole bar between these bounds and the factor is remembered.
+SCALE_MIN = 0.8
+SCALE_MAX = 2.4
 
 
 def C(key):
     """Current value of a theme token (re-read live on every use)."""
     return T.t(key)
+
+
+def _pick_position(saved_x, saved_y, w, h, displays):
+    """Choose where to place a w x h bar, given the real per-display rectangles.
+
+    Pure geometry so it is unit-testable without a Tk display or real monitors.
+    `displays` is any sequence of objects exposing .x/.y/.width/.height/.primary
+    (layout.DisplayInfo). Returns an (x, y) tuple, or None when `displays` is
+    empty so the caller can fall back to its own vroot/screen clamp.
+
+    The saved position is honoured only when the bar would be substantially
+    visible on SOME single real display (at least half its width and its full
+    height inside that display), then nudge-clamped fully onto that same
+    display. Anything else - no saved value, a position in the L-shaped dead
+    space between staggered monitors, or a wildly out-of-range value - resets to
+    the default: horizontally centered with y = 8 on the primary display, using
+    that display's own origin (the primary is not always at 0,0).
+    """
+    if not displays:
+        return None
+
+    primary = next((d for d in displays if d.primary), displays[0])
+    default = (primary.x + (primary.width - w) // 2, primary.y + 8)
+
+    if not isinstance(saved_x, int) or not isinstance(saved_y, int):
+        return default
+
+    for d in displays:
+        # Intersection of the bar rect with this display rect.
+        iw = min(saved_x + w, d.x + d.width) - max(saved_x, d.x)
+        ih = min(saved_y + h, d.y + d.height) - max(saved_y, d.y)
+        if iw >= w * 0.5 and ih >= h:
+            # Substantially on this display: pull it fully back onto THIS one.
+            nx = max(d.x, min(saved_x, d.x + d.width - w))
+            ny = max(d.y, min(saved_y, d.y + d.height - h))
+            return (nx, ny)
+
+    return default
 
 
 class MiniBar(tk.Toplevel):
@@ -58,6 +107,9 @@ class MiniBar(tk.Toplevel):
         self._drag_off = (0, 0)
         self._btns: list[tk.Button] = []
         self._flash_jobs: dict[int, str] = {}
+        # Remembered scale factor for the whole pill (see the corner grip).
+        self._scale = self._load_scale()
+        self._resize_start = (0, 1.0)
 
         # 1px accent border over a panel fill => a floating pill on any wallpaper
         self.border = tk.Frame(self, bg=C("panel"), highlightthickness=1,
@@ -109,10 +161,12 @@ class MiniBar(tk.Toplevel):
         else:
             for ws in self.app.store.workspaces:
                 b = tk.Button(self.bar, text=ws.name,
-                              command=lambda w=ws: self._switch(w),
                               bg=C("acc"), fg=C("acc_ink"), activebackground=C("acc2"),
                               activeforeground=C("acc_ink"), relief="flat", bd=0,
                               font=("Segoe UI Semibold", 10), padx=12, pady=6, cursor="hand2")
+                # Pass the button in directly so the flash is unambiguous even if
+                # two workspaces share a name.
+                b.configure(command=lambda w=ws, btn=b: self._switch(w, btn))
                 b.pack(side="left", padx=(4, 0))
                 self._bind_menu(b)
                 self._btns.append(b)
@@ -128,6 +182,20 @@ class MiniBar(tk.Toplevel):
                                 font=("Segoe UI", 11), padx=8, pady=6, cursor="hand2")
         self._close.pack(side="left")
 
+        # Corner grip: drag to scale the whole pill (frameless, so no native border).
+        self._resize = tk.Label(self.bar, text=RESIZE_GLYPH, bg=C("panel"), fg=C("dim"),
+                                font=("Segoe UI", 11), cursor="size_nw_se", padx=2)
+        self._resize.pack(side="left", padx=(2, 0))
+        self._bind_resize(self._resize)
+
+        # Right-click opens the context menu anywhere on the bar, including the
+        # chevron, close and resize glyphs.
+        self._bind_menu(self._chevron)
+        self._bind_menu(self._close)
+        self._bind_menu(self._resize)
+
+        self._apply_scale()
+
     # ---------- theming ----------
     def apply_theme(self):
         """Repaint every widget after a theme/accent change (driven by the App)."""
@@ -137,6 +205,7 @@ class MiniBar(tk.Toplevel):
         self.border.configure(bg=C("panel"), highlightbackground=C("acc"), highlightcolor=C("acc"))
         self.bar.configure(bg=C("panel"))
         self._grip.configure(bg=C("panel"), fg=C("dim"))
+        self._resize.configure(bg=C("panel"), fg=C("dim"))
         for b in self._btns:
             b.configure(bg=C("acc"), fg=C("acc_ink"), activebackground=C("acc2"),
                         activeforeground=C("acc_ink"))
@@ -153,9 +222,9 @@ class MiniBar(tk.Toplevel):
             pass
 
     # ---------- actions ----------
-    def _switch(self, ws):
+    def _switch(self, ws, btn=None):
         self.app.apply_workspace(ws)
-        self._flash(next((b for b in self._btns if b["text"] == ws.name), None))
+        self._flash(btn)
 
     def _go_setup(self):
         self.app._exit_minimal()
@@ -207,6 +276,57 @@ class MiniBar(tk.Toplevel):
         finally:
             self._menu.grab_release()
 
+    # ---------- scaling ----------
+    def _load_scale(self):
+        try:
+            s = float(settings.get("mini_scale", 1.0))
+        except (TypeError, ValueError):
+            s = 1.0
+        return max(SCALE_MIN, min(SCALE_MAX, s))
+
+    def _apply_scale(self):
+        """Resize every glyph and button font/padding to the current scale.
+
+        The pill sets only its position (never a fixed geometry size), so growing
+        the fonts and paddings lets the frameless window auto-size to content.
+        """
+        f = self._scale
+
+        def sz(base):
+            return max(6, round(base * f))
+
+        self._grip.configure(font=("Segoe UI", sz(12)))
+        self._resize.configure(font=("Segoe UI", sz(11)))
+        for b in self._btns:
+            b.configure(font=("Segoe UI Semibold", sz(10)), padx=sz(12), pady=sz(6))
+        for b in (self._chevron, self._close):
+            b.configure(font=("Segoe UI", sz(11)), padx=sz(8), pady=sz(6))
+
+    def _bind_resize(self, widget):
+        widget.bind("<Button-1>", self._resize_start_drag)
+        widget.bind("<B1-Motion>", self._resize_move)
+        widget.bind("<ButtonRelease-1>", self._resize_end)
+
+    def _resize_start_drag(self, event):
+        self._resize_start = (event.x_root, self._scale)
+
+    def _resize_move(self, event):
+        # Horizontal drag drives the scale: dragging the corner outward grows the
+        # pill. ~300px of travel spans one full unit of scale.
+        delta = event.x_root - self._resize_start[0]
+        self._set_scale(self._resize_start[1] + delta / 300.0)
+
+    def _resize_end(self, event):
+        settings.update(mini_scale=self._scale)
+        self._save_position()
+
+    def _set_scale(self, scale):
+        scale = max(SCALE_MIN, min(SCALE_MAX, scale))
+        if abs(scale - self._scale) < 0.01:
+            return
+        self._scale = scale
+        self._apply_scale()
+
     # ---------- position memory ----------
     def _save_position(self):
         settings.update(mini_x=self.winfo_x(), mini_y=self.winfo_y())
@@ -216,25 +336,39 @@ class MiniBar(tk.Toplevel):
         w = self.winfo_reqwidth()
         h = self.winfo_reqheight()
 
-        # Visible virtual desktop bounds (spans all monitors); fall back to the
-        # primary screen if the virtual-root metrics are unavailable.
+        data = settings.load()
+        sx = data.get("mini_x")
+        sy = data.get("mini_y")
+
+        # Real per-display rectangles are the source of truth so a stale position
+        # can never land in the L-shaped dead space between staggered monitors.
+        try:
+            displays = layout.get_displays()
+        except Exception:  # noqa: BLE001
+            displays = []
+
+        pos = _pick_position(sx, sy, w, h, displays)
+        if pos is None:
+            # get_displays() is unavailable (non-Win32, stubbed, or it failed);
+            # keep the old vroot/screen clamp so nothing regresses.
+            pos = self._fallback_position(sx, sy, w, h)
+
+        self.geometry(f"+{pos[0]}+{pos[1]}")
+
+    def _fallback_position(self, sx, sy, w, h):
+        """Legacy virtual-desktop clamp, used only when real rects are absent."""
         vx = self.winfo_vrootx() or 0
         vy = self.winfo_vrooty() or 0
         vw = self.winfo_vrootwidth() or self.winfo_screenwidth()
         vh = self.winfo_vrootheight() or self.winfo_screenheight()
 
-        data = settings.load()
-        x = data.get("mini_x")
-        y = data.get("mini_y")
-        if not isinstance(x, int) or not isinstance(y, int):
-            # Default: top-center of the primary screen.
-            x = (self.winfo_screenwidth() - w) // 2
-            y = 8
+        if not isinstance(sx, int) or not isinstance(sy, int):
+            sx = (self.winfo_screenwidth() - w) // 2
+            sy = 8
 
-        # Clamp fully inside the virtual desktop so the bar is never stranded.
-        x = max(vx, min(x, vx + vw - w))
-        y = max(vy, min(y, vy + vh - h))
-        self.geometry(f"+{x}+{y}")
+        x = max(vx, min(sx, vx + vw - w))
+        y = max(vy, min(sy, vy + vh - h))
+        return (x, y)
 
     # ---------- lifecycle ----------
     def show(self):

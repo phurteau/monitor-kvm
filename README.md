@@ -170,8 +170,11 @@ buttons that floats over everything and takes almost no screen space.
   or **Ctrl+M**. Start the app with **`python app.py --minimal`** to launch straight
   into it.
 - The pill is **always-on-top** and **draggable** (grab the `⋮` grip or any empty
-  spot on the bar). It **remembers its position** between runs, and is clamped back
-  on-screen if a monitor changes.
+  spot on the bar). It **remembers its position** between runs, and if a monitor
+  changes it snaps back onto a real display instead of into the dead space between
+  staggered monitors.
+- **Resize** it by dragging the `◢` corner grip: this scales the whole pill up or
+  down, and the size is remembered too.
 - Click a workspace button to switch; the button flashes briefly as confirmation.
 - **Leave it** with the **`⤡`** chevron, **Ctrl+M**, or **right-click → Full view**.
   Right-click also offers **Toggle Light / Dark** and **Exit**. The **`×`** button
@@ -267,6 +270,7 @@ Unrelated files are never touched. Nothing else is left behind.
 | `assets\make_icon.py` | Generates the app icon (`icon.ico` + PNGs) |
 | `tools\ControlMyMonitor.exe` | NirSoft DDC/CI tool (backend) |
 | `Monitor Switcher.cmd` | No-console GUI launcher |
+| `tests\test_minimal_position.py` | Unit tests for the minimal-view monitor-aware position restore |
 
 ---
 
