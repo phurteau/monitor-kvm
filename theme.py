@@ -27,12 +27,13 @@ Token meanings (mirror the CSS):
 from __future__ import annotations
 
 import colorsys
-import json
-import os
 
-from apppaths import data_dir
+import settings
 
-SETTINGS_PATH = os.path.join(data_dir(), "settings.json")
+# Re-exported so older imports of theme.SETTINGS_PATH keep working; the file is
+# now owned and merged by settings.py so theme+accent no longer clobber other
+# keys (mini-bar position, last-used mode).
+SETTINGS_PATH = settings.SETTINGS_PATH
 
 DEFAULT_THEME = "dark"
 DEFAULT_ACCENT = "#025500"
@@ -135,26 +136,18 @@ class Theme:
         self._load()
         self._recompute()
 
-    # ----- persistence (our localStorage) -----
+    # ----- persistence (settings.json, merged so other keys survive) -----
     def _load(self):
-        try:
-            with open(SETTINGS_PATH, "r", encoding="utf-8") as fh:
-                data = json.load(fh)
-            name = data.get("theme")
-            accent = data.get("accent")
-            if name in _BASE:
-                self.name = name
-            if accent and is_valid_hex(accent):
-                self.accent = accent
-        except (OSError, json.JSONDecodeError):
-            pass
+        data = settings.load()
+        name = data.get("theme")
+        accent = data.get("accent")
+        if name in _BASE:
+            self.name = name
+        if accent and is_valid_hex(accent):
+            self.accent = accent
 
     def _save(self):
-        try:
-            with open(SETTINGS_PATH, "w", encoding="utf-8") as fh:
-                json.dump({"theme": self.name, "accent": self.accent}, fh, indent=2)
-        except OSError:
-            pass
+        settings.update(theme=self.name, accent=self.accent)
 
     # ----- token computation -----
     def _recompute(self):

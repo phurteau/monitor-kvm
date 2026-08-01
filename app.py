@@ -13,13 +13,16 @@ from __future__ import annotations
 
 import os
 import queue
+import sys
 import threading
 import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
 
 import ddc
 import layout
+import minimal
 import profiles
+import settings
 import theme as theme_mod
 import tray as tray_mod
 import updater
@@ -85,6 +88,7 @@ class App(tk.Tk):
         self._layout_cache: list = []
         self._ui_queue: queue.Queue = queue.Queue()
         self._themed: list = []  # (widget, {option: token_key}) for live retheme
+        self.mini = None         # active MiniBar in minimal view, else None
 
         self._build_style()
         self._build_ui()
@@ -104,6 +108,16 @@ class App(tk.Tk):
         else:
             self._log("System tray unavailable (pystray not installed). Window mode only.")
         self.protocol("WM_DELETE_WINDOW", self._quit_app)
+
+        # Ctrl+M toggles minimal view (also bound on the MiniBar itself).
+        self.bind("<Control-m>", lambda e: self._toggle_minimal())
+        self.bind("<Control-M>", lambda e: self._toggle_minimal())
+
+        # Open straight into minimal view when asked on the command line, or when
+        # minimal was the last-used mode. Scheduled so the main window is fully
+        # realized first (its canvas still draws correctly while withdrawn).
+        if "--minimal" in sys.argv or settings.get("minimal", False):
+            self.after(0, self._enter_minimal)
 
     # ---------- thread-safe UI marshalling ----------
     def _post(self, fn):
@@ -230,6 +244,13 @@ class App(tk.Tk):
                 tobj.refresh_icon()
             except Exception:  # noqa: BLE001
                 pass
+        mini = getattr(self, "mini", None)
+        if mini is not None:
+            try:
+                if mini.winfo_exists():
+                    mini.apply_theme()
+            except tk.TclError:
+                pass
 
     # ---------- main layout ----------
     def _build_ui(self):
@@ -246,6 +267,8 @@ class App(tk.Tk):
         ctrl.pack(fill="x", padx=18, pady=(6, 0))
         self.menu_btn = ttk.Button(ctrl, text="\u2630  Menu", command=self._open_overflow_menu)
         self.menu_btn.pack(side="right")
+        self.mini_btn = ttk.Button(ctrl, text="\u2921 Mini", command=self._enter_minimal)
+        self.mini_btn.pack(side="right", padx=(0, 6))
         self._build_overflow_menu()
 
         # update banner (hidden until an update is found)
@@ -308,6 +331,8 @@ class App(tk.Tk):
         m = tk.Menu(self, tearoff=0)
         self._overflow = m
         self._style_overflow_menu()
+        m.add_command(label="Minimal view", command=self._enter_minimal)
+        m.add_separator()
         m.add_command(label="Toggle Light / Dark", command=self._toggle_theme)
         m.add_command(label="Accent color...", command=self._open_accent_picker)
         m.add_separator()
@@ -452,6 +477,43 @@ class App(tk.Tk):
         t = getattr(self, "tray", None)
         if t is not None:
             t.update_menu()
+        # keep the minimal bar in sync too (workspaces can be renamed/added/removed)
+        mini = getattr(self, "mini", None)
+        if mini is not None:
+            try:
+                if mini.winfo_exists():
+                    mini.build()
+            except tk.TclError:
+                pass
+
+    # ---------- minimal view ----------
+    def _enter_minimal(self):
+        """Show the frameless minimal bar and hide the full window."""
+        if self.mini is not None and self.mini.winfo_exists():
+            self.mini.show()
+        else:
+            self.mini = minimal.MiniBar(self)
+        self.withdraw()
+        settings.update(minimal=True)
+
+    def _exit_minimal(self):
+        """Destroy the minimal bar and restore the full window."""
+        m = self.mini
+        self.mini = None
+        if m is not None:
+            try:
+                m.close()
+            except tk.TclError:
+                pass
+        self.deiconify()
+        self.lift()
+        settings.update(minimal=False)
+
+    def _toggle_minimal(self):
+        if self.mini is not None and self.mini.winfo_exists():
+            self._exit_minimal()
+        else:
+            self._enter_minimal()
 
     # ---------- tray / window helpers ----------
     def apply_workspace_by_name(self, name: str):
@@ -501,6 +563,10 @@ class App(tk.Tk):
             anchor="e", padx=16, pady=12)
 
     def _show_window(self):
+        # From the tray "Open Switcher": if we are in minimal view, drop the bar
+        # and bring back the full window instead of stacking one on top of it.
+        if self.mini is not None and self.mini.winfo_exists():
+            self._exit_minimal()
         self.deiconify()
         self.lift()
         self.attributes("-topmost", True)
@@ -510,6 +576,15 @@ class App(tk.Tk):
         self.withdraw()
 
     def _quit_app(self):
+        # Tear down the minimal bar first so it never lingers as a stray topmost
+        # window after the main window is destroyed.
+        m = getattr(self, "mini", None)
+        if m is not None:
+            try:
+                m.close()
+            except Exception:  # noqa: BLE001
+                pass
+            self.mini = None
         # Stop the tray icon (runs on its own thread), tear down Tk, then force
         # the process to exit so no background thread keeps the .exe locked.
         t = getattr(self, "tray", None)

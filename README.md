@@ -160,6 +160,25 @@ all monitors instantly, or use **Open Switcher** / **Quit**. **Closing the windo
 clicking Exit) fully closes the app** and ends the process. Nothing is left running
 in the background.
 
+## Minimal view
+
+Once your workspaces are set up, you rarely need the full window, you just want to
+pick a workspace. **Minimal view** collapses the app to a tiny frameless pill of
+buttons that floats over everything and takes almost no screen space.
+
+- **Enter it** from **Menu → Minimal view**, the **`⤡ Mini`** button next to Menu,
+  or **Ctrl+M**. Start the app with **`python app.py --minimal`** to launch straight
+  into it.
+- The pill is **always-on-top** and **draggable** (grab the `⋮` grip or any empty
+  spot on the bar). It **remembers its position** between runs, and is clamped back
+  on-screen if a monitor changes.
+- Click a workspace button to switch; the button flashes briefly as confirmation.
+- **Leave it** with the **`⤡`** chevron, **Ctrl+M**, or **right-click → Full view**.
+  Right-click also offers **Toggle Light / Dark** and **Exit**. The **`×`** button
+  quits the app.
+- The app **reopens in whichever mode you used last**, so if you quit from minimal
+  view it comes back minimal.
+
 ## Set an input by clicking the map
 
 On the layout map, **click any monitor box** to open a small inline panel where you
@@ -231,7 +250,9 @@ Unrelated files are never touched. Nothing else is left behind.
 | File | Purpose |
 |------|---------|
 | `app.py` | GUI: display-layout map, click-to-set inputs, workspace buttons, capture & edit |
+| `minimal.py` | Minimal view: frameless, always-on-top, draggable pill of workspace buttons |
 | `theme.py` | Token-based dual-theme engine (dark/light + accent derivation + persistence) |
+| `settings.py` | Merge-based read/modify/write store for `settings.json` (theme, accent, minimal view state) |
 | `colorwheel.py` | HSV color-wheel accent picker dialog |
 | `layout.py` | Reads the live Windows display arrangement (position, size, orientation, primary) via Win32 |
 | `tray.py` | Optional system-tray icon for switching workspaces without the window |
